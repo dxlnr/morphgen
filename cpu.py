@@ -1,4 +1,5 @@
 import struct
+import glob
 
 # CPU operates on 32-bit units
 registers = [0] * 32
@@ -29,4 +30,6 @@ def step():
 # Writeback
 
 print(struct.unpack("I", b"\x00"*4))
-# print("\x")
+
+if __name__ == "__main__":
+    glob.glob()
