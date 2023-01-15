@@ -1,9 +1,3 @@
-# miscv
-Implementing a Processor.
+# Morphgen
 
-Five stage RISC pipeline:
-- Instruction Fetch
-- Instruction Decode
-- Execute
-- Memory Access
-- Writeback
+Implementing a Processor.
