@@ -31,6 +31,7 @@ set PATH $RISCV/bin $PATH
 #### RISCV-Tests
 RISCV environment variable has to be set to the RISC-V tools install path, and the riscv-gnu-toolchain package must be installed.
 ```bash
+cd riscv-tests
 autoconf
 ./configure --prefix=$RISCV/target
 make

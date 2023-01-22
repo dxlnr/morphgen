@@ -1,0 +1,6 @@
+Small example for investigating ELF. Run:
+    $ gcc -Wall -o mininal mininal.c
+    $ readelf -a mininal    
+
+Linux Programmers Manual
+    $ man elf
