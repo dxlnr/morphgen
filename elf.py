@@ -9,12 +9,9 @@ def read_to_mem(memory, data, addr):
     :param data:
     :param addr:
     """
-    print(hex(addr), len(data))
-    print(addr)
-    print("\n")
-
-    addr -= 0x80000000
-    assert addr >= 0 and addr > len(memory)
+    if addr != 0:
+        addr -= 0x80000000
+    assert addr < len(memory)
     memory = memory[:addr] + data + memory[addr + len(data):]
 
     return memory
@@ -26,11 +23,6 @@ def elf_reader(memory, file: str):
         with open(file, "rb") as f:
             elf = ELFFile(f)
 
-            for n, s in enumerate(elf.iter_segments()):
-                # print(s.header)
-                # print(s.data())
-                print(n)
-                # print("")
-                # memory = read_to_mem(memory, s.data(), s.header.p_paddr)
-
+            for s in elf.iter_segments():
+                memory = read_to_mem(memory, s.data(), s.header.p_paddr)
     return memory

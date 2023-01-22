@@ -12,7 +12,7 @@ PC = 32
 S = 0
 # Processor Flag
 P = [False] * 32
-# 4GB mem 
+# 64k memory 
 memory = b'\x00' * 0x10000
 
 def fetch32(addr):
@@ -24,6 +24,7 @@ def step():
     # Instruction Fetch
     ins = fetch32(registers[PC])
     # Instruction Decode
+
     # Execute
 
     # Memory Access
@@ -33,5 +34,8 @@ def step():
 
 if __name__ == "__main__":
     for x in glob.glob("modules/riscv-tests/isa/rv32ui-*"):
+        if x.endswith('.dump'):
+            continue
+        print("test : ", x)
+        # Reading the elf program header to memory.
         memory = elf_reader(memory, x)
-        break
