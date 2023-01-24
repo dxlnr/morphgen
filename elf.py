@@ -23,6 +23,20 @@ def elf_reader(memory, file: str):
         with open(file, "rb") as f:
             elf = ELFFile(f)
 
-            for s in elf.iter_segments():
+            for s in elf.iter_segments(type='PT_LOAD'):
                 memory = read_to_mem(memory, s.data(), s.header.p_paddr)
     return memory
+
+
+def elf_str_ins(ins):
+    """."""
+    import struct
+    strs = ''
+    for idx, b in enumerate(struct.pack("I", ins)):
+        strs += f'x{idx}: {b} \n'
+    return strs
+
+
+def elf_str_reg(register):
+    """Loads register & returns it as str."""
+    return ''.join(f'x{idx} : {c} \n' for idx, c in register)
