@@ -2,7 +2,8 @@ import struct
 import glob
 from elftools.elf.elffile import ELFFile
 
-from elf import elf_reader, elf_str_ins, elf_str_reg
+from elf import elf_reader 
+from riscv import OPCODE
 
 # CPU operates on 32-bit units, attach the pc for 33 entries.
 registers = [0] * 33
@@ -14,19 +15,27 @@ S = 0
 P = [False] * 32
 
 
-def fetch32(addr):
+def fetch32(memory, addr):
     addr -= 0x80000000
     assert addr >= 0 and addr < len(memory)
     return struct.unpack("I", memory[addr : addr + 4])[0]
 
 def decode32(ins):
-    pass
+    # Bitwise ops to decode the instruction.
+    opscode = (ins >> 7, ins & 255)[1]
+     
+    if opscode == 0b1101111:
+        print(f"Instruction: {OPCODE[opscode]}")
+        ins = ins >> 12
 
-def step():
+
+def step(memory):
     # Instruction Fetch
-    ins = fetch32(registers[PC])
+    ins = fetch32(memory, registers[PC])
+    
     # Instruction Decode
-    print(bin(ins), '', len(bin(ins)) - 2)
+    decode32(ins)
+    
     # Execute
 
     # Memory Access
@@ -34,7 +43,7 @@ def step():
     # Writeback
     return True
 
-
+ 
 if __name__ == "__main__":
     # 64k memory
     memory = b"\x00" * 0x10000
@@ -46,9 +55,14 @@ if __name__ == "__main__":
         # Reading the elf program header to memory.
         memory = elf_reader(memory, x)
 
+        test = 0x0
+        print(memory[test: test +4]) 
+        print(memory[test: test +4].hex())
+
+
         registers[PC] = 0x80000000
         i = 0
-        while step():
+        while step(memory):
             i += 1
             if i == 1:
                 registers[PC] = 0x8000000c
