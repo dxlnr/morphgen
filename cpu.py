@@ -15,18 +15,27 @@ S = 0
 P = [False] * 32
 
 
+def decode_ins(ins: int, s: int , e: int):
+    """Decode single instruction by slices.
+
+    :param ins: Instruction as binary str.
+    :param s: Starting point of chunk.
+    :param e: Ending point of chunk."""
+    return ins >> s & (( 1 << (e - s + 1)) - 1)
+
+
 def fetch32(memory, addr):
     addr -= 0x80000000
     assert addr >= 0 and addr < len(memory)
     return struct.unpack("I", memory[addr : addr + 4])[0]
 
+
 def decode32(ins):
     # Bitwise ops to decode the instruction.
-    opscode = (ins >> 7, ins & 255)[1]
-     
+    opscode = decode_ins(ins, 0, 6)
+    
     if opscode == 0b1101111:
         print(f"Instruction: {OPCODE[opscode]}")
-        ins = ins >> 12
 
 
 def step(memory):
@@ -54,11 +63,6 @@ if __name__ == "__main__":
         print("test : ", x)
         # Reading the elf program header to memory.
         memory = elf_reader(memory, x)
-
-        test = 0x0
-        print(memory[test: test +4]) 
-        print(memory[test: test +4].hex())
-
 
         registers[PC] = 0x80000000
         i = 0
