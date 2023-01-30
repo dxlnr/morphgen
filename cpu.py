@@ -15,7 +15,7 @@ S = 0
 P = [False] * 32
 
 
-def decode_ins(ins: int, s: int, e: int):
+def decode_ins(ins: int, e: int, s: int):
     """Decode single instruction by slices.
 
     :param ins: Instruction as binary str.
@@ -33,27 +33,51 @@ def fetch32(addr):
 
 def decode32(ins):
     # Bitwise ops to decode the instruction.
-    opscode = decode_ins(ins, 0, 6)
-    # Keep track where the program is. 
+    opscode = decode_ins(ins, 6, 0)
+    # Keep track where the program is.
     print(f"  {hex(registers[PC])} : {hex(ins)} : {OPCODE[opscode]}")
+    # Compute register destination.
+    rd = decode_ins(ins, 11, 7)
 
     if opscode == 0b1101111:
-        rd = decode_ins(ins, 7, 11)
         assert rd == 0
-        imm = decode_ins(ins, 12, 31)
+        imm = decode_ins(ins, 31, 12)
 
         offset = (
             ((decode_ins(imm, 19, 19) << 12) - decode_ins(imm, 19, 19))
-            | decode_ins(imm, 0, 7)
+            | decode_ins(imm, 7, 0)
             | decode_ins(imm, 8, 8)
-            | decode_ins(imm, 9, 18)
+            | decode_ins(imm, 18, 9)
         ) << 1
-        
-        registers[PC] += offset 
 
-        return True
+        registers[PC] += offset
+
+    elif opscode == 0b0010011:
+        # Needs some work.
+        func3 = decode_ins(ins, 14, 12)
+        rs1 = decode_ins(ins, 19, 15)
+        imm = decode_ins(ins, 31, 20)
+
+        offset = (
+            (decode_ins(imm, 11, 11) << 21) - decode_ins(imm, 11, 11)
+        ) | decode_ins(imm, 10, 0)
+
+        registers[PC] += 4
+
+    elif opscode == 0b0010111:
+        imm = decode_ins(ins, 31, 12)
+
+        offset = imm << 12
+
+        registers[rd] = offset
+        registers[PC] += 4
+    
+    elif opscode == 0b1110011:
+        pass
     else:
         return False
+    
+    return True
 
 def step():
     # Instruction Fetch
@@ -62,7 +86,7 @@ def step():
     # Instruction Decode
 
     # Execute
-     
+
     # Memory Access
 
     # Writeback
