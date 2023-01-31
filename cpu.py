@@ -38,7 +38,8 @@ def decode32(ins):
     print(f"  {hex(registers[PC])} : {hex(ins)} : {OPCODE[opscode]}")
     # Compute register destination.
     rd = decode_ins(ins, 11, 7)
-
+    
+    # JAL
     if opscode == 0b1101111:
         assert rd == 0
         imm = decode_ins(ins, 31, 12)
@@ -51,19 +52,55 @@ def decode32(ins):
         ) << 1
 
         registers[PC] += offset
-
+    
+    # ALU
     elif opscode == 0b0010011:
-        # Needs some work.
         func3 = decode_ins(ins, 14, 12)
         rs1 = decode_ins(ins, 19, 15)
-        imm = decode_ins(ins, 31, 20)
+        
+        # SLLI (Shift Left Logical Immediate)
+        if func3 == 0b001:
+            assert decode_ins(ins, 31, 25) == 0
+            registers[rd] = rs1 << decode_ins(ins, 24, 20)
+        # SRLI (Shift Right Logical Immediate)
+        elif func3 == 0b101:
+            assert decode_ins(ins, 31, 25) == 0
+            registers[rd] = rs1 >> decode_ins(ins, 24, 20)
+        # SRAI (Shift Right Arithmetic Immediate)
+        elif func3 == 0b101:
+            assert decode_ins(ins, 31, 25) == 0b010000
+            registers[rd] = rs1 >> decode_ins(ins, 24, 20)
+        else:
+            imm = decode_ins(ins, 31, 20)
 
-        offset = (
-            (decode_ins(imm, 11, 11) << 21) - decode_ins(imm, 11, 11)
-        ) | decode_ins(imm, 10, 0)
-
+            offset = (
+                (decode_ins(imm, 11, 11) << 21) - decode_ins(imm, 11, 11)
+            ) | decode_ins(imm, 10, 0)
+            
+            # ADDI (Add Immediate)
+            if func3 == 0b000:
+                registers[rd] = rs1 + offset
+            # SLTI (Set Less Than Immediate) & SLTIU (Set Less Than Immediate Unsigned)
+            elif func3 == 0b010 or func3 == 0b011:
+                if rs1 < offset:
+                    registers[rd] = 1
+                else:
+                    registers[rd] = 0
+            # XORI (Exclusive Or Immediate)  
+            elif func3 == 0b100:
+                registers[rd] = rs1 ^ offset
+            # ORI (OR Immediate)
+            elif func3 == 0b110:
+                registers[rd] = rs1 | offset
+            # ANDI (AND Immediate)
+            elif func3 == 0b111:
+                registers[rd] = rs1 & offset
+            else:
+                raise ValueError(f"func3 {hex(func3)} not processable for {OPCODE[opscode]}.") 
+            
         registers[PC] += 4
-
+    
+    # AUIPC 
     elif opscode == 0b0010111:
         imm = decode_ins(ins, 31, 12)
 
@@ -72,12 +109,43 @@ def decode32(ins):
         registers[rd] = offset
         registers[PC] += 4
     
-    elif opscode == 0b1110011:
+    # OP
+    elif opscode == 0b0110011:
         pass
-    else:
-        return False
     
+    # SYSTEM 
+    elif opscode == 0b1110011: 
+        func3 = decode_ins(ins, 14, 12)
+        rs1 = decode_ins(ins, 19, 15)
+        
+        if func3 == 0b000:
+            print("ECALL")
+
+        # CSRRW
+        elif func3 == 0b001:
+            if not rd == 0:
+                csr = decode_ins(ins, 31, 20)
+                registers[rd] = csr
+                
+        # CSRRS
+        elif func3 == 0b010:
+            csr = decode_ins(ins, 31, 20)
+        # CSRRC
+        elif func3 == 0b011:
+            csr = decode_ins(ins, 31, 20) 
+        elif func3 == 0b101:
+            pass
+        elif func3 == 0b110:
+            pass 
+        elif func3 == 0b111:
+            pass
+        else:
+            raise ValueError(f"func3 {hex(func3)} not processable for {OPCODE[opscode]}.") 
+        
+        registers[PC] += 4
+
     return True
+
 
 def step():
     # Instruction Fetch
