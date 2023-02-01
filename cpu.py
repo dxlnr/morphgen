@@ -17,13 +17,15 @@ def registers_to_str(registers) -> str:
     """Returns formatted str of all registers."""
     s = ""
     for i, c in enumerate(registers):
-        if i % 5 == 0:
+        if i % 5 == 0 and i != 0:
             s += "\n"
-        if i < 10:
-            s += f"x0{i} : {hex(c)} "
-        else:
-            s += f"x{i} : {hex(c)} "
+        s += f"\t%3s : %08x " % ("x%d" % i, c)
     return s
+
+
+def bitmask(bits: int = 32) -> int:
+    """Returns a bitmask based on number of bits."""
+    return 2**bits - 1
 
 
 def decode_ins(ins: int, e: int, s: int):
@@ -42,7 +44,16 @@ def fetch32(addr):
     return struct.unpack("I", memory[addr : addr + 4])[0]
 
 
-def decode32(ins):
+def step():
+    """Process instructions."""
+    # Instruction Fetch
+    ins = fetch32(registers[PC])
+
+    # Instruction Decode
+    # Execute
+    # Memory Access
+    # Writeback
+
     # Bitwise ops to decode the instruction.
     opscode = decode_ins(ins, 6, 0)
     # Keep track where the program is.
@@ -61,9 +72,10 @@ def decode32(ins):
             | decode_ins(imm, 18, 9)
         ) << 1
 
-        registers[rd] = registers[PC] + 4
         registers[PC] += offset
 
+        if rd != 0:
+            registers[rd] = registers[PC] + 4
     # ALU
     elif opscode == 0b0010011:
         func3 = decode_ins(ins, 14, 12)
@@ -72,7 +84,7 @@ def decode32(ins):
         # SLLI (Shift Left Logical Immediate)
         if func3 == 0b001:
             assert decode_ins(ins, 31, 25) == 0
-            registers[rd] = registers[rs1] << decode_ins(ins, 24, 20)
+            registers[rd] = (registers[rs1] << decode_ins(ins, 24, 20)) & bitmask()
         # SRLI (Shift Right Logical Immediate)
         elif func3 == 0b101:
             assert decode_ins(ins, 31, 25) == 0
@@ -159,6 +171,7 @@ def decode32(ins):
             raise ValueError
 
         registers[PC] += 4
+
     # SYSTEM
     elif opscode == 0b1110011:
         func3 = decode_ins(ins, 14, 12)
@@ -191,22 +204,11 @@ def decode32(ins):
 
         registers[PC] += 4
 
-    return True
+    else:
+        raise NotImplemented
 
-
-def step():
-    # Instruction Fetch
-    ins = fetch32(registers[PC])
-
-    # Instruction Decode
     print(registers_to_str(registers))
-    # Execute
-
-    # Memory Access
-
-    # Writeback
-
-    return decode32(ins)
+    return True
 
 
 if __name__ == "__main__":

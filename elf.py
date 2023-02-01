@@ -5,9 +5,9 @@ from elftools.elf.elffile import ELFFile
 def read_to_mem(memory, data, addr):
     """Reads opscode from elf segment & bumps it to memory.
 
-    :param memory:  
-    :param data: 
-    :param addr: 
+    :param memory:
+    :param data:
+    :param addr:
     """
     if addr != 0:
         addr -= 0x80000000
