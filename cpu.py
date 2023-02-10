@@ -53,9 +53,10 @@ def step():
     # Execute
     # Memory Access
     # Writeback
-
+    
     # Bitwise ops to decode the instruction.
     opscode = decode_ins(ins, 6, 0)
+    print(bin(opscode))
     # Keep track where the program is.
     print(f"  {hex(registers[PC])} : {hex(ins)} : {OPCODE[opscode]}")
     # Compute register destination.
@@ -84,7 +85,7 @@ def step():
         # SLLI (Shift Left Logical Immediate)
         if func3 == 0b001:
             assert decode_ins(ins, 31, 25) == 0
-            registers[rd] = (registers[rs1] << decode_ins(ins, 24, 20)) & bitmask()
+            registers[rd] = (registers[rs1] << decode_ins(ins, 24, 20)) & bitmask(32)
         # SRLI (Shift Right Logical Immediate)
         elif func3 == 0b101:
             assert decode_ins(ins, 31, 25) == 0
@@ -121,7 +122,7 @@ def step():
             else:
                 raise ValueError(
                     f"func3 {hex(func3)} not processable for {OPCODE[opscode]}."
-                )
+                )
 
         registers[PC] += 4
 
@@ -144,9 +145,9 @@ def step():
         # ADD & SUB
         if func3 == 0b0:
             if func7 == 0b0:
-                registers[rd] = registers[rs1] + registers[rs2]
+                registers[rd] = (registers[rs1] + registers[rs2]) & bitmask()
             else:
-                registers[rd] = registers[rs1] - registers[rs2]
+                registers[rd] = (registers[rs1] - registers[rs2]) & bitmask()
         elif func3 == 0b001:
             pass
         # SLT (Set Less Than) & SLTU (Set Less Than Unsigned)
