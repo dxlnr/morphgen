@@ -28,7 +28,7 @@ def bitmask(bits: int = 32) -> int:
     return 2**bits - 1
 
 
-def decode_ins(ins: int, e: int, s: int):
+def dins(ins: int, e: int, s: int):
     """Decode single instruction by slices.
 
     :param ins: Instruction as binary str.
@@ -38,117 +38,119 @@ def decode_ins(ins: int, e: int, s: int):
     return ins >> s & ((1 << (e - s + 1)) - 1)
 
 
+def sext(val: int, bits: int):
+    """Performs sign extension by number of bits given."""
+    sb = 1 << (bits - 1)
+    return (val & (sb - 1)) - (val & sb)
+
+
 def fetch32(addr):
     addr -= 0x80000000
-    assert addr >= 0 and addr < len(memory)
+    if addr < 0 or addr >= len(memory):
+        raise Exception("read out of memory: 0x%x" % addr)
     return struct.unpack("I", memory[addr : addr + 4])[0]
 
 
 def step():
     """Process instructions."""
-    # Instruction Fetch
+    # (1) Instruction Fetch
     ins = fetch32(registers[PC])
 
     # Instruction Decode
     # Execute
     # Memory Access
     # Writeback
-
+    
+    # (2) Instruction Decode
+    #
     # Bitwise ops to decode the instruction.
-    opscode = decode_ins(ins, 6, 0)
+    opscode = dins(ins, 6, 0)
     # Keep track where the program is.
     print(f"  {hex(registers[PC])} : {hex(ins)} : {OPCODE[opscode]}")
     # Compute register destination.
-    rd = decode_ins(ins, 11, 7)
-
+    rd = dins(ins, 11, 7)
+    # Compute register sources.
+    rs1 = dins(ins, 19, 15)
+    rs2 = dins(ins, 24, 20)
+    # 
+    func3 = dins(ins, 14, 12)
+    #
+    func7 = dins(ins, 31, 25)
+    #
+    imm_i = sext(dins(ins, 31, 20), 12)
+    imm_u = sext(dins(ins, 31, 12) << 12, 32)
+    # imm_s = sext(dins(ins, 31, 25) << 5 | dins(11, 7), 12)
+    # imm_b = sign_extend((gibi(32, 31)<<12) | (gibi(30, 25)<<5) | (gibi(11, 8)<<1) | (gibi(8, 7)<<11), 13)
+    # imm_u = sign_extend(gibi(31, 12)<<12, 32)
+    # imm_j = sign_extend((gibi(32, 31)<<20) | (gibi(30, 21)<<1) | (gibi(21, 20)<<11) | (gibi(19, 12)<<12), 21)
+    
     # JAL (Jump And Link)
     if opscode == 0b1101111:
-        imm = decode_ins(ins, 31, 12)
-
         offset = (
-            ((decode_ins(imm, 19, 19) << 12) - decode_ins(imm, 19, 19) << 18)
-            | (decode_ins(imm, 7, 0) << 11)
-            | (decode_ins(imm, 8, 8) << 10)
-            | decode_ins(imm, 19, 9)
+            (dins(ins, 31, 31) << 12)
+            | (dins(ins, 19, 12) << 11)
+            | (dins(ins, 20, 20) << 10)
+            | dins(ins, 31, 21)
         ) << 1
 
         registers[PC] += offset
-        registers[rd] = registers[PC] + 4
+        if rd != 0:
+            registers[rd] = registers[PC] + 4
 
     # JALR (Jump And Link Register)
     elif opscode == 0b1100111:
-        assert decode_ins(ins, 14, 12) == 0
-
-        rs1 = decode_ins(ins, 19, 15)
-        imm = decode_ins(ins, 31, 20)
-
+        assert dins(ins, 14, 12) == 0
+        rs1 = dins(ins, 19, 15)
         registers[rd] = registers[PC] + 4
-        registers[PC] = (imm + registers[rs1]) & ~1
+        registers[PC] = (imm_i + registers[rs1]) & ~1
 
     # ALU
     elif opscode == 0b0010011:
-        func3 = decode_ins(ins, 14, 12)
-        rs1 = decode_ins(ins, 19, 15)
-
+        # ADDI (Add Immediate)
+        if func3 == 0b000:
+            registers[rd] = registers[rs1] + imm_i
         # SLLI (Shift Left Logical Immediate)
-        if func3 == 0b001:
-            assert decode_ins(ins, 31, 25) == 0
-            registers[rd] = (registers[rs1] << decode_ins(ins, 24, 20)) & bitmask(32)
-        # SRLI (Shift Right Logical Immediate)
+        elif func3 == 0b001:
+            registers[rd] = (registers[rs1] << dins(ins, 24, 20)) & bitmask(32)
+        # SLTI (Set Less Than Immediate) 
+        elif func3 == 0b010: 
+            registers[rd] = 1 if registers[rs1] < imm_i else 0
+        # SLTIU (Set Less Than Immediate Unsigned)
+        elif func3 == 0b011: 
+            registers[rd] = 1 if registers[rs1] < imm_i else 0
+        # XORI (Exclusive OR Immediate)
+        elif func3 == 0b100:
+            registers[rd] = registers[rs1] ^ imm_i  
+        # SRLI (Shift Right Logical Immediate) & SRAI (Shift Right Arithmetic Immediate)
         elif func3 == 0b101:
-            assert decode_ins(ins, 31, 25) == 0
-            registers[rd] = registers[rs1] >> decode_ins(ins, 24, 20)
-        # SRAI (Shift Right Arithmetic Immediate)
-        elif func3 == 0b101:
-            assert decode_ins(ins, 31, 25) == 0b010000
-            registers[rd] = registers[rs1] >> decode_ins(ins, 24, 20)
+            registers[rd] = registers[rs1] >> registers[rs2]
+        # ORI (OR Immediate)
+        elif func3 == 0b110:
+            registers[rd] = registers[rs1] | imm_i
+        # ANDI (AND Immediate)
+        elif func3 == 0b111:
+            registers[rd] = registers[rs1] & imm_i
         else:
-            imm = decode_ins(ins, 31, 20)
-
-            offset = (
-                (decode_ins(imm, 11, 11) << 21) - decode_ins(imm, 11, 11)
-            ) | decode_ins(imm, 10, 0)
-
-            # ADDI (Add Immediate)
-            if func3 == 0b000:
-                registers[rd] = registers[rs1] + offset
-            # SLTI (Set Less Than Immediate) & SLTIU (Set Less Than Immediate Unsigned)
-            elif func3 == 0b010 or func3 == 0b011:
-                if registers[rs1] < offset:
-                    registers[rd] = 1
-                else:
-                    registers[rd] = 0
-            # XORI (Exclusive OR Immediate)
-            elif func3 == 0b100:
-                registers[rd] = registers[rs1] ^ offset
-            # ORI (OR Immediate)
-            elif func3 == 0b110:
-                registers[rd] = registers[rs1] | offset
-            # ANDI (AND Immediate)
-            elif func3 == 0b111:
-                registers[rd] = registers[rs1] & offset
-            else:
-                raise ValueError(
-                    f"func3 {hex(func3)} not processable for {OPCODE[opscode]}."
-                )
+            raise ValueError(
+                f"func3 {hex(func3)} not processable for {OPCODE[opscode]}."
+            )
 
         registers[PC] += 4
 
     # AUIPC
     elif opscode == 0b0010111:
-        imm = decode_ins(ins, 31, 12)
+        # imm = dins(ins, 31, 12)
+        imm_u = sext(dins(ins, 31, 12), 32)
 
-        offset = imm << 12
-
-        registers[rd] = offset
+        registers[rd] = registers[PC] + imm_u
         registers[PC] += 4
 
     # OP
     elif opscode == 0b0110011:
-        func3 = decode_ins(ins, 14, 12)
-        rs1 = decode_ins(ins, 19, 15)
-        rs2 = decode_ins(ins, 24, 20)
-        func7 = decode_ins(ins, 31, 25)
+        func3 = dins(ins, 14, 12)
+        rs1 = dins(ins, 19, 15)
+        rs2 = dins(ins, 24, 20)
+        func7 = dins(ins, 31, 25)
 
         # ADD & SUB
         if func3 == 0b0:
@@ -183,53 +185,46 @@ def step():
 
     # SYSTEM
     elif opscode == 0b1110011:
-        func3 = decode_ins(ins, 14, 12)
-        rs1 = decode_ins(ins, 19, 15)
-
-        if func3 == 0b000:
-            print("ECALL")
-
-        # CSRRW
-        elif func3 == 0b001:
-            if not rd == 0:
+        # ECALL
+        if rd == 0b000 and func3 == 0b000:
+            print("ecall")
+        # csrrw & csrrwi
+        elif (func3 == 0b001) | (func3 == 0b101):
+            if rd != 0:
                 csr = registers[rs1]
                 registers[rd] = csr
-        # CSRRS
-        elif func3 == 0b010:
-            csr = decode_ins(ins, 31, 20)
-        # CSRRC
-        elif func3 == 0b011:
-            csr = decode_ins(ins, 31, 20)
-        elif func3 == 0b101:
-            pass
-        elif func3 == 0b110:
-            pass
-        elif func3 == 0b111:
-            pass
+        # csrrs & csrrsi
+        elif (func3 == 0b010) | (func3 == 0b110):
+            csr = dins(ins, 31, 20) | registers[rs1]
+            registers[rd] = csr
+        # csrrc & csrrci
+        elif (func3 == 0b011) | (func3 == 0b111):
+            csr = dins(ins, 31, 20) & ~registers[rs1]
+            registers[rd] = csr
         else:
             raise ValueError(
-                f"func3 {hex(func3)} not processable for {OPCODE[opscode]}."
+                f"func3 {bin(func3)} - {hex(func3)} - {func3} not processable for {OPCODE[opscode]}."
             )
 
         registers[PC] += 4
 
     # LUI
     elif opscode == 0b0110111:
-        registers[rd] = decode_ins(ins, 31, 12)
+        registers[rd] = sext(dins(ins, 31, 12), 20)
         registers[PC] += 4
 
     # BRANCH
     elif opscode == 0b1100011:
         offset = (
-            (decode_ins(ins, 31, 31) << 20) << 11
-            | decode_ins(ins, 7, 7) << 10
-            | decode_ins(ins, 30, 25) << 4
-            | decode_ins(ins, 11, 8)
+            (dins(ins, 31, 31) << 20) << 11
+            | dins(ins, 7, 7) << 10
+            | dins(ins, 30, 25) << 4
+            | dins(ins, 11, 8)
         ) << 1
 
-        func3 = decode_ins(ins, 14, 12)
-        rs1 = decode_ins(ins, 19, 15)
-        rs2 = decode_ins(ins, 24, 20)
+        func3 = dins(ins, 14, 12)
+        rs1 = dins(ins, 19, 15)
+        rs2 = dins(ins, 24, 20)
 
         # beq | bne | blt | bge | bltu | bgeu
         if (
@@ -245,8 +240,7 @@ def step():
             registers[PC] += 4
     else:
         raise NotImplemented
-
-    print(registers_to_str(registers))
+    
     return True
 
 
@@ -262,7 +256,7 @@ if __name__ == "__main__":
     # x0 will always be zero while x32 will hold the program counter.
     registers = [0] * 33
 
-    for x in glob.glob("modules/riscv-tests/isa/rv32ui-*"):
+    for x in glob.glob("modules/riscv-tests/isa/rv32ui-v-add"):
         if x.endswith(".dump"):
             continue
         print(f"Execute : {x}\n")
