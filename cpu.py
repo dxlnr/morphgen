@@ -60,7 +60,7 @@ def step():
     # Execute
     # Memory Access
     # Writeback
-    
+
     # (2) Instruction Decode
     #
     # Bitwise ops to decode the instruction.
@@ -72,7 +72,7 @@ def step():
     # Compute register sources.
     rs1 = dins(ins, 19, 15)
     rs2 = dins(ins, 24, 20)
-    # 
+    #
     func3 = dins(ins, 14, 12)
     #
     func7 = dins(ins, 31, 25)
@@ -83,7 +83,7 @@ def step():
     # imm_b = sign_extend((gibi(32, 31)<<12) | (gibi(30, 25)<<5) | (gibi(11, 8)<<1) | (gibi(8, 7)<<11), 13)
     # imm_u = sign_extend(gibi(31, 12)<<12, 32)
     # imm_j = sign_extend((gibi(32, 31)<<20) | (gibi(30, 21)<<1) | (gibi(21, 20)<<11) | (gibi(19, 12)<<12), 21)
-    
+
     # JAL (Jump And Link)
     if opscode == 0b1101111:
         offset = (
@@ -112,15 +112,15 @@ def step():
         # SLLI (Shift Left Logical Immediate)
         elif func3 == 0b001:
             registers[rd] = (registers[rs1] << dins(ins, 24, 20)) & bitmask(32)
-        # SLTI (Set Less Than Immediate) 
-        elif func3 == 0b010: 
+        # SLTI (Set Less Than Immediate)
+        elif func3 == 0b010:
             registers[rd] = 1 if registers[rs1] < imm_i else 0
         # SLTIU (Set Less Than Immediate Unsigned)
-        elif func3 == 0b011: 
+        elif func3 == 0b011:
             registers[rd] = 1 if registers[rs1] < imm_i else 0
         # XORI (Exclusive OR Immediate)
         elif func3 == 0b100:
-            registers[rd] = registers[rs1] ^ imm_i  
+            registers[rd] = registers[rs1] ^ imm_i
         # SRLI (Shift Right Logical Immediate) & SRAI (Shift Right Arithmetic Immediate)
         elif func3 == 0b101:
             registers[rd] = registers[rs1] >> registers[rs2]
@@ -147,31 +147,24 @@ def step():
 
     # OP
     elif opscode == 0b0110011:
-        func3 = dins(ins, 14, 12)
-        rs1 = dins(ins, 19, 15)
-        rs2 = dins(ins, 24, 20)
-        func7 = dins(ins, 31, 25)
-
         # ADD & SUB
-        if func3 == 0b0:
+        if func3 == 0b000:
             if func7 == 0b0:
                 registers[rd] = (registers[rs1] + registers[rs2]) & bitmask()
             else:
                 registers[rd] = (registers[rs1] - registers[rs2]) & bitmask()
+        # SLL 
         elif func3 == 0b001:
-            pass
+            registers[rd] = registers[rs1] << (registers[rs2] & bitmask(5))
         # SLT (Set Less Than) & SLTU (Set Less Than Unsigned)
         elif func3 == 0b010 or func3 == 0b011:
-            if registers[rs1] < registers[rs2]:
-                registers[rd] = 1
-            else:
-                registers[rd] = 2
+            registers[rd] = 1 if registers[rs1] < registers[rs2] else 0
         # XOR (Exclusive OR)
         elif func3 == 0b100:
             registers[rd] = registers[rs1] ^ registers[rs2]
         # SRL (Shift Right Logical) & SRA (Shift Right Arithmetic)
         elif func3 == 0b101:
-            pass
+            registers[rd] = registers[rs1] >> (registers[rs2] & bitmask(5))
         # OR
         elif func3 == 0b110:
             registers[rd] = registers[rs1] | registers[rs2]
@@ -187,7 +180,7 @@ def step():
     elif opscode == 0b1110011:
         # ECALL
         if rd == 0b000 and func3 == 0b000:
-            print("ecall")
+            raise Exception("EnvironmentCall")
         # csrrw & csrrwi
         elif (func3 == 0b001) | (func3 == 0b101):
             if rd != 0:
@@ -240,7 +233,7 @@ def step():
             registers[PC] += 4
     else:
         raise NotImplemented
-    
+
     return True
 
 

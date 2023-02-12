@@ -10,6 +10,10 @@ def dins(ins: int, e: int, s: int):
     return ins >> s & ((1 << (e - s + 1)) - 1)
 
 
+def bitmask(bits: int = 32):
+    return 2**bits - 1
+
+
 def test_dins():
     pass
 
@@ -22,6 +26,14 @@ def test_sext():
     imm = 0b10101110100000010
     imm_i = sext(imm, 12)
     print(bin(imm_i), imm_i)
+
+
+def test_lsb():
+    x18 = 0x08
+    x12 = 0x76543210
+    t = x18 & bitmask(5)
+
+    assert x12 >> x18 == 0x00765432
 
 
 def test_jal():
@@ -48,3 +60,4 @@ def test_branch():
 if __name__ == "__main__":
     # test_branch()
     test_sext()
+    test_lsb()
