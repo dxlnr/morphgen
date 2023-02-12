@@ -56,7 +56,6 @@ def step():
     
     # Bitwise ops to decode the instruction.
     opscode = decode_ins(ins, 6, 0)
-    print(bin(opscode))
     # Keep track where the program is.
     print(f"  {hex(registers[PC])} : {hex(ins)} : {OPCODE[opscode]}")
     # Compute register destination.
@@ -75,6 +74,16 @@ def step():
         
         registers[PC] += offset
         registers[rd] = registers[PC] + 4
+    
+    # JALR (Jump And Link Register)
+    elif opscode == 0b1100111:
+        assert decode_ins(ins, 14, 12) == 0
+        
+        rs1 = decode_ins(ins, 19, 15)
+        imm = decode_ins(ins, 31, 20)
+        
+        registers[rd] = registers[PC] + 4 
+        registers[PC] = (imm + registers[rs1]) & ~1
 
     # ALU
     elif opscode == 0b0010011:
@@ -121,7 +130,7 @@ def step():
             else:
                 raise ValueError(
                     f"func3 {hex(func3)} not processable for {OPCODE[opscode]}."
-                )
+                )
 
         registers[PC] += 4
 
