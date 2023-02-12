@@ -1,3 +1,5 @@
+"""Testing Suite"""
+
 def decode_ins(ins: int, e: int, s: int):
     """Decode single instruction by slices.
 
@@ -8,7 +10,11 @@ def decode_ins(ins: int, e: int, s: int):
     return ins >> s & ((1 << (e - s + 1)) - 1)
 
 
-def test_shift():
+def test_decode_ins():
+    pass
+
+
+def test_jal():
     res = 0b10100101011100
     imm = 0b10101110100000010
 
@@ -21,6 +27,13 @@ def test_shift():
 
     assert res == offset
 
+def test_branch():
+    ins = 0b1001110101000101000
+
+    offset = decode_ins(ins, 31, 31) << 20 
+    print("off: ", bin(offset))
+
+
 
 if __name__ == "__main__":
-    test_shift()
+    test_branch()

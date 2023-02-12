@@ -53,7 +53,7 @@ def step():
     # Execute
     # Memory Access
     # Writeback
-    
+
     # Bitwise ops to decode the instruction.
     opscode = decode_ins(ins, 6, 0)
     # Keep track where the program is.
@@ -71,18 +71,18 @@ def step():
             | (decode_ins(imm, 8, 8) << 10)
             | decode_ins(imm, 19, 9)
         ) << 1
-        
+
         registers[PC] += offset
         registers[rd] = registers[PC] + 4
-    
+
     # JALR (Jump And Link Register)
     elif opscode == 0b1100111:
         assert decode_ins(ins, 14, 12) == 0
-        
+
         rs1 = decode_ins(ins, 19, 15)
         imm = decode_ins(ins, 31, 20)
-        
-        registers[rd] = registers[PC] + 4 
+
+        registers[rd] = registers[PC] + 4
         registers[PC] = (imm + registers[rs1]) & ~1
 
     # ALU
@@ -213,6 +213,36 @@ def step():
 
         registers[PC] += 4
 
+    # LUI
+    elif opscode == 0b0110111:
+        registers[rd] = decode_ins(ins, 31, 12)
+        registers[PC] += 4
+
+    # BRANCH
+    elif opscode == 0b1100011:
+        offset = (
+            (decode_ins(ins, 31, 31) << 20) << 11
+            | decode_ins(ins, 7, 7) << 10
+            | decode_ins(ins, 30, 25) << 4
+            | decode_ins(ins, 11, 8)
+        ) << 1
+
+        func3 = decode_ins(ins, 14, 12)
+        rs1 = decode_ins(ins, 19, 15)
+        rs2 = decode_ins(ins, 24, 20)
+
+        # beq | bne | blt | bge | bltu | bgeu
+        if (
+            (func3 == 0b000 and registers[rs1] == registers[rs2])
+            | (func3 == 0b001 and registers[rs1] != registers[rs2])
+            | (func3 == 0b100 and registers[rs1] < registers[rs2])
+            | (func3 == 0b101 and registers[rs1] >= registers[rs2])
+            | (func3 == 0b110 and registers[rs1] < registers[rs2])
+            | (func3 == 0b111 and registers[rs1] >= registers[rs2])
+        ):
+            registers[PC] += offset
+        else:
+            registers[PC] += 4
     else:
         raise NotImplemented
 
