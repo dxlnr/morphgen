@@ -67,16 +67,15 @@ def step():
         imm = decode_ins(ins, 31, 12)
 
         offset = (
-            ((decode_ins(imm, 19, 19) << 12) - decode_ins(imm, 19, 19))
-            | decode_ins(imm, 7, 0)
-            | decode_ins(imm, 8, 8)
-            | decode_ins(imm, 18, 9)
+            ((decode_ins(imm, 19, 19) << 12) - decode_ins(imm, 19, 19) << 18)
+            | (decode_ins(imm, 7, 0) << 11)
+            | (decode_ins(imm, 8, 8) << 10)
+            | decode_ins(imm, 19, 9)
         ) << 1
-
+        
         registers[PC] += offset
+        registers[rd] = registers[PC] + 4
 
-        if rd != 0:
-            registers[rd] = registers[PC] + 4
     # ALU
     elif opscode == 0b0010011:
         func3 = decode_ins(ins, 14, 12)

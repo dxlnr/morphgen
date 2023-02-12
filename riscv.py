@@ -13,3 +13,5 @@ OPCODE = {
     0b0001111: "FENCE",
     0b1110011: "SYSTEM", 
 }
+
+INS = {}
