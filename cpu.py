@@ -3,7 +3,7 @@ import struct
 import glob
 
 from elf import elf_reader
-from riscv import OPCODE
+from riscv import ABI, OPCODE
 
 # Programm Counter
 PC = 32
@@ -19,7 +19,7 @@ def registers_to_str(registers) -> str:
     for i, c in enumerate(registers):
         if i % 5 == 0 and i != 0:
             s += "\n"
-        s += f"\t%3s : %08x " % ("x%d" % i, c)
+        s += f"\t%3s : %08x " % (ABI[i], c)
     return s
 
 
@@ -153,7 +153,7 @@ def step():
                 registers[rd] = (registers[rs1] + registers[rs2]) & bitmask()
             else:
                 registers[rd] = (registers[rs1] - registers[rs2]) & bitmask()
-        # SLL 
+        # SLL
         elif func3 == 0b001:
             registers[rd] = registers[rs1] << (registers[rs2] & bitmask(5))
         # SLT (Set Less Than) & SLTU (Set Less Than Unsigned)
@@ -178,20 +178,26 @@ def step():
 
     # SYSTEM
     elif opscode == 0b1110011:
+        csr = dins(ins, 31, 20)
         # ECALL
         if rd == 0b000 and func3 == 0b000:
-            raise Exception("EnvironmentCall")
-        # csrrw & csrrwi
+            # raise Exception("EnvironmentCall")
+            print("ecall")
+        # CSRRW & CSRRWI
         elif (func3 == 0b001) | (func3 == 0b101):
+            print("CSRRW", rd, rs1, csr)
+            if csr == 3072:
+                return False
             if rd != 0:
                 csr = registers[rs1]
                 registers[rd] = csr
-        # csrrs & csrrsi
+        # CSRRS & CSRRSI
         elif (func3 == 0b010) | (func3 == 0b110):
-            csr = dins(ins, 31, 20) | registers[rs1]
+            print("CSRRS", rd, rs1, csr)
             registers[rd] = csr
-        # csrrc & csrrci
+        # CSRRC & CSRRCI
         elif (func3 == 0b011) | (func3 == 0b111):
+            print("CSRRC", rd, rs1, csr)
             csr = dins(ins, 31, 20) & ~registers[rs1]
             registers[rd] = csr
         else:
@@ -233,7 +239,8 @@ def step():
             registers[PC] += 4
     else:
         raise NotImplemented
-
+    
+    # print(registers_to_str(registers))
     return True
 
 

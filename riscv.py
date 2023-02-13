@@ -11,7 +11,15 @@ OPCODE = {
     0b0100011: "STORE",
     0b0010011: "ALU",
     0b0001111: "FENCE",
-    0b1110011: "SYSTEM", 
+    0b1110011: "SYSTEM",
 }
 
-INS = {}
+ABI = (
+    ["x0", "ra", "sp", "gp", "tp"]
+    + ["t%d" % i for i in range(0, 3)]
+    + ["s0", "s1"]
+    + ["a%d" % i for i in range(0, 8)]
+    + ["s%d" % i for i in range(2, 12)]
+    + ["t%d" % i for i in range(3, 7)]
+    + ["PC"]
+)
