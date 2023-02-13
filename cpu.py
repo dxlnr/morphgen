@@ -35,13 +35,17 @@ def dins(ins: int, e: int, s: int):
     :param s: Starting point of chunk.
     :param e: Ending point of chunk.
     """
-    return ins >> s & ((1 << (e - s + 1)) - 1)
+    return (ins >> s) & ((1 << (e - s + 1)) - 1)
 
 
 def sext(val: int, bits: int):
     """Performs sign extension by number of bits given."""
-    sb = 1 << (bits - 1)
-    return (val & (sb - 1)) - (val & sb)
+    if val >> (bits - 1) == 1:
+        return -((1 << bits) - val)
+    else:
+        return val
+    # sb = 1 << (bits - 1)
+    # return (val & (sb - 1)) - (val & sb)
 
 
 def fetch32(addr):
@@ -59,14 +63,16 @@ def imm_j(ins: int) -> int:
             | (dins(ins, 19, 12) << 11)
             | (dins(ins, 20, 20) << 10)
             | dins(ins, 31, 21)
-        ) << 1,
+        )
+        << 1,
         21,
     )
 
 
 def imm_u(ins: int) -> int:
     """U-type instruction format."""
-    pass
+    # return sext(dins(ins, 31, 12) << 12, 32)
+    return dins(ins, 31, 12) << 12
 
 
 def imm_i(ins: int) -> int:
@@ -76,12 +82,21 @@ def imm_i(ins: int) -> int:
 
 def imm_s(ins: int) -> int:
     """S-type instruction format."""
-    pass
+    return sext(((dins(ins, 31, 25) << 5) | dins(ins, 11, 7)), 11)
 
 
 def imm_b(ins: int) -> int:
     """B-type instruction format."""
-    pass
+    return sext(
+        (
+            (dins(ins, 31, 31) << 10)
+            | (dins(ins, 7, 7) << 9)
+            | (dins(ins, 30, 25) << 4)
+            | dins(ins, 11, 8)
+        )
+        << 1,
+        12,
+    )
 
 
 def step():
@@ -109,8 +124,8 @@ def step():
     #
     func7 = dins(ins, 31, 25)
     #
-    imm_i = sext(dins(ins, 31, 20), 12)
-    imm_u = sext(dins(ins, 31, 12) << 12, 32)
+    # imm_i = sext(dins(ins, 31, 20), 12)
+    # imm_u = sext(dins(ins, 31, 12) << 12, 32)
     # imm_s = sext(dins(ins, 31, 25) << 5 | dins(11, 7), 12)
     # imm_b = sign_extend((gibi(32, 31)<<12) | (gibi(30, 25)<<5) | (gibi(11, 8)<<1) | (gibi(8, 7)<<11), 13)
     # imm_u = sign_extend(gibi(31, 12)<<12, 32)
@@ -118,50 +133,49 @@ def step():
 
     # JAL (Jump And Link)
     if opscode == 0b1101111:
-        offset = (
-            (dins(ins, 31, 31) << 12)
-            | (dins(ins, 19, 12) << 11)
-            | (dins(ins, 20, 20) << 10)
-            | dins(ins, 31, 21)
-        ) << 1
+        # offset = (
+        #     (dins(ins, 31, 31) << 12)
+        #     | (dins(ins, 19, 12) << 11)
+        #     | (dins(ins, 20, 20) << 10)
+        #     | dins(ins, 31, 21)
+        # ) << 1
 
-        registers[PC] += offset
+        registers[PC] += imm_j(ins)
         if rd != 0:
             registers[rd] = registers[PC] + 4
 
     # JALR (Jump And Link Register)
     elif opscode == 0b1100111:
         assert dins(ins, 14, 12) == 0
-        rs1 = dins(ins, 19, 15)
         registers[rd] = registers[PC] + 4
-        registers[PC] = (imm_i + registers[rs1]) & ~1
+        registers[PC] = (imm_i(ins) + registers[rs1]) & ~1
 
     # ALU
     elif opscode == 0b0010011:
         # ADDI (Add Immediate)
         if func3 == 0b000:
-            registers[rd] = registers[rs1] + imm_i
+            registers[rd] = registers[rs1] + imm_i(ins)
         # SLLI (Shift Left Logical Immediate)
         elif func3 == 0b001:
-            registers[rd] = (registers[rs1] << dins(ins, 24, 20)) & bitmask(32)
+            registers[rd] = registers[rs1] << dins(ins, 25, 20)
         # SLTI (Set Less Than Immediate)
         elif func3 == 0b010:
-            registers[rd] = 1 if registers[rs1] < imm_i else 0
+            registers[rd] = 1 if registers[rs1] < imm_i(ins) else 0
         # SLTIU (Set Less Than Immediate Unsigned)
         elif func3 == 0b011:
-            registers[rd] = 1 if registers[rs1] < imm_i else 0
+            registers[rd] = 1 if registers[rs1] < imm_i(ins) else 0
         # XORI (Exclusive OR Immediate)
         elif func3 == 0b100:
-            registers[rd] = registers[rs1] ^ imm_i
+            registers[rd] = registers[rs1] ^ imm_i(ins)
         # SRLI (Shift Right Logical Immediate) & SRAI (Shift Right Arithmetic Immediate)
         elif func3 == 0b101:
             registers[rd] = registers[rs1] >> registers[rs2]
         # ORI (OR Immediate)
         elif func3 == 0b110:
-            registers[rd] = registers[rs1] | imm_i
+            registers[rd] = registers[rs1] | imm_i(ins)
         # ANDI (AND Immediate)
         elif func3 == 0b111:
-            registers[rd] = registers[rs1] & imm_i
+            registers[rd] = registers[rs1] & imm_i(ins)
         else:
             raise ValueError(
                 f"func3 {hex(func3)} not processable for {OPCODE[opscode]}."
@@ -171,10 +185,7 @@ def step():
 
     # AUIPC
     elif opscode == 0b0010111:
-        # imm = dins(ins, 31, 12)
-        imm_u = sext(dins(ins, 31, 12), 32)
-
-        registers[rd] = registers[PC] + imm_u
+        registers[rd] = registers[PC] + imm_u(ins)
         registers[PC] += 4
 
     # OP
@@ -241,21 +252,17 @@ def step():
 
     # LUI
     elif opscode == 0b0110111:
-        registers[rd] = sext(dins(ins, 31, 12), 20)
+        registers[rd] = imm_u(ins)
         registers[PC] += 4
 
     # BRANCH
     elif opscode == 0b1100011:
-        offset = (
-            (dins(ins, 31, 31) << 20) << 11
-            | dins(ins, 7, 7) << 10
-            | dins(ins, 30, 25) << 4
-            | dins(ins, 11, 8)
-        ) << 1
-
-        func3 = dins(ins, 14, 12)
-        rs1 = dins(ins, 19, 15)
-        rs2 = dins(ins, 24, 20)
+        # offset = (
+        #     (dins(ins, 31, 31) << 20) << 11
+        #     | dins(ins, 7, 7) << 10
+        #     | dins(ins, 30, 25) << 4
+        #     | dins(ins, 11, 8)
+        # ) << 1
 
         # beq | bne | blt | bge | bltu | bgeu
         if (
@@ -266,14 +273,15 @@ def step():
             | (func3 == 0b110 and registers[rs1] < registers[rs2])
             | (func3 == 0b111 and registers[rs1] >= registers[rs2])
         ):
-            registers[PC] += offset
+            registers[PC] += imm_b(ins)
         else:
             registers[PC] += 4
     else:
         raise NotImplemented
-    
+
     # (5) Write back to registers
-    # print(registers_to_str(registers))
+    if registers[PC] >= 0x80002A48:
+        print(registers_to_str(registers))
     return True
 
 
@@ -289,7 +297,7 @@ if __name__ == "__main__":
     # x0 will always be zero while x32 will hold the program counter.
     registers = [0] * 33
 
-    for x in glob.glob("modules/riscv-tests/isa/rv32ui-v-add"):
+    for x in glob.glob("modules/riscv-tests/isa/rv32ui-v-add*"):
         if x.endswith(".dump"):
             continue
         print(f"Execute : {x}\n")
