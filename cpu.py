@@ -51,12 +51,44 @@ def fetch32(addr):
     return struct.unpack("I", memory[addr : addr + 4])[0]
 
 
+def imm_j(ins: int) -> int:
+    """J-type instruction format."""
+    return sext(
+        (
+            (dins(ins, 31, 31) << 12)
+            | (dins(ins, 19, 12) << 11)
+            | (dins(ins, 20, 20) << 10)
+            | dins(ins, 31, 21)
+        ) << 1,
+        21,
+    )
+
+
+def imm_u(ins: int) -> int:
+    """U-type instruction format."""
+    pass
+
+
+def imm_i(ins: int) -> int:
+    """I-type instruction format."""
+    return sext(dins(ins, 31, 20), 12)
+
+
+def imm_s(ins: int) -> int:
+    """S-type instruction format."""
+    pass
+
+
+def imm_b(ins: int) -> int:
+    """B-type instruction format."""
+    pass
+
+
 def step():
     """Process instructions."""
     # (1) Instruction Fetch
     ins = fetch32(registers[PC])
 
-    # Instruction Decode
     # Execute
     # Memory Access
     # Writeback
@@ -240,6 +272,7 @@ def step():
     else:
         raise NotImplemented
     
+    # (5) Write back to registers
     # print(registers_to_str(registers))
     return True
 
