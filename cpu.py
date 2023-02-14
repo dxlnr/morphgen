@@ -7,10 +7,6 @@ from riscv import ABI, OPCODE
 
 # Programm Counter
 PC = 32
-# Stackpointer
-S = 0
-# Processor Flag
-P = [False] * 32
 
 
 def registers_to_str(registers) -> str:
@@ -58,8 +54,8 @@ def fetch32(addr):
 def mem32(addr, dat):
     global memory
     addr -= 0x80000000
-    assert addr >=0 and addr < len(memory)
-    memory = memory[:addr] + dat + memory[addr+len(dat):]
+    assert addr >= 0 and addr < len(memory)
+    memory = memory[:addr] + dat + memory[addr + len(dat) :]
 
 
 def imm_j(ins: int) -> int:
@@ -78,7 +74,6 @@ def imm_j(ins: int) -> int:
 
 def imm_u(ins: int) -> int:
     """U-type instruction format."""
-    # return sext(dins(ins, 31, 12) << 12, 32)
     return dins(ins, 31, 12) << 12
 
 
@@ -111,10 +106,6 @@ def step():
     # (1) Instruction Fetch
     ins = fetch32(registers[PC])
 
-    # Execute
-    # Memory Access
-    # Writeback
-
     # (2) Instruction Decode
     #
     # Bitwise ops to decode the instruction.
@@ -128,9 +119,7 @@ def step():
     rs2 = dins(ins, 24, 20)
     #
     func3 = dins(ins, 14, 12)
-    #
     func7 = dins(ins, 31, 25)
-    #
 
     # JAL (Jump And Link)
     if opscode == 0b1101111:
@@ -166,7 +155,7 @@ def step():
             if func7 == 0b0100000:
                 sb = registers[rs1] >> 31
                 out = registers[rs1] >> (imm_i(ins) & bitmask(5))
-                registers[rd] |= (bitmask() * sb) << (32 - (imm_i(ins) & 0x1f))
+                registers[rd] |= (bitmask() * sb) << (32 - (imm_i(ins) & 0x1F))
             else:
                 registers[rd] = registers[rs1] >> (imm_i(ins) & bitmask(5))
         # ORI (OR Immediate)
@@ -241,7 +230,7 @@ def step():
             registers[rd] = csr
         else:
             raise ValueError(
-                f"func3 {bin(func3)} - {hex(func3)} - {func3} not processable for {OPCODE[opscode]}."
+                f"func3 {bin(func3)} not processable for {OPCODE[opscode]}."
             )
 
         registers[PC] += 4
@@ -266,24 +255,28 @@ def step():
             registers[PC] += imm_b(ins)
         else:
             registers[PC] += 4
-    
+
     # STORE
     elif opscode == 0b0100011:
         # sb (Store Byte)
         if func3 == 0b000:
-            mem32(registers[rs1] + imm_s(ins), struct.pack("B", registers[rs2] & bitmask(8)))
+            mem32(
+                registers[rs1] + imm_s(ins),
+                struct.pack("B", registers[rs2] & bitmask(8)),
+            )
         # sh (Store Halfword)
         elif func3 == 0b001:
-            mem32(registers[rs1] + imm_s(ins), struct.pack("H", registers[rs2] & bitmask(16)))
+            mem32(
+                registers[rs1] + imm_s(ins),
+                struct.pack("H", registers[rs2] & bitmask(16)),
+            )
         # sw (Store Word)
         elif func3 == 0b010:
             mem32(registers[rs1] + imm_s(ins), struct.pack("I", registers[rs2]))
         else:
-            raise ValueError(
-                f"func3 not processable for {OPCODE[opscode]}."
-            )
+            raise ValueError(f"func3 not processable for {OPCODE[opscode]}.")
         registers[PC] += 4
-    
+
     # LOAD
     elif opscode == 0b0000011:
         print(bin(func3) == 0b010)
@@ -303,20 +296,15 @@ def step():
         elif func3 == 0b101:
             registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(32)
         else:
-            raise ValueError(
-                f"func3 not processable for {OPCODE[opscode]}."
-            )
+            raise ValueError(f"func3 not processable for {OPCODE[opscode]}.")
         registers[PC] += 4
 
     # FENCE
     elif opscode == 0b0001111:
         registers[PC] += 4
     else:
-        raise NotImplemented
+        raise ValueError(f"{OPCODE[opscode]}")
 
-    # (5) Write back to registers
-    # if registers[PC] >= 0x80002A48:
-    #     print(registers_to_str(registers))
     return True
 
 
@@ -343,4 +331,3 @@ if __name__ == "__main__":
         i = 0
         while step():
             pass
-        # break
