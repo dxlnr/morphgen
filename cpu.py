@@ -55,6 +55,13 @@ def fetch32(addr):
     return struct.unpack("I", memory[addr : addr + 4])[0]
 
 
+def mem32(addr, dat):
+    global memory
+    addr -= 0x80000000
+    assert addr >=0 and addr < len(memory)
+    memory = memory[:addr] + dat + memory[addr+len(dat):]
+
+
 def imm_j(ins: int) -> int:
     """J-type instruction format."""
     return sext(
@@ -216,23 +223,20 @@ def step():
         csr = dins(ins, 31, 20)
         # ECALL
         if rd == 0b000 and func3 == 0b000:
-            # raise Exception("EnvironmentCall")
-            print("ecall")
+            print("  ecall")
         # CSRRW & CSRRWI
         elif (func3 == 0b001) | (func3 == 0b101):
-            print("CSRRW", rd, rs1, csr)
             if csr == 3072:
+                print("CSRRW", rd, rs1, csr)
                 return False
             if rd != 0:
                 csr = registers[rs1]
                 registers[rd] = csr
         # CSRRS & CSRRSI
         elif (func3 == 0b010) | (func3 == 0b110):
-            print("CSRRS", rd, rs1, csr)
             registers[rd] = csr
         # CSRRC & CSRRCI
         elif (func3 == 0b011) | (func3 == 0b111):
-            print("CSRRC", rd, rs1, csr)
             csr = dins(ins, 31, 20) & ~registers[rs1]
             registers[rd] = csr
         else:
@@ -262,12 +266,57 @@ def step():
             registers[PC] += imm_b(ins)
         else:
             registers[PC] += 4
+    
+    # STORE
+    elif opscode == 0b0100011:
+        # sb (Store Byte)
+        if func3 == 0b000:
+            mem32(registers[rs1] + imm_s(ins), struct.pack("B", registers[rs2] & bitmask(8)))
+        # sh (Store Halfword)
+        elif func3 == 0b001:
+            mem32(registers[rs1] + imm_s(ins), struct.pack("H", registers[rs2] & bitmask(16)))
+        # sw (Store Word)
+        elif func3 == 0b010:
+            mem32(registers[rs1] + imm_s(ins), struct.pack("I", registers[rs2]))
+        else:
+            raise ValueError(
+                f"func3 not processable for {OPCODE[opscode]}."
+            )
+        registers[PC] += 4
+    
+    # LOAD
+    elif opscode == 0b0000011:
+        print(bin(func3) == 0b010)
+        # lb (Load Byte)
+        if func3 == 0b000:
+            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(8), 7)
+        # lh (Load Halfword)
+        elif func3 == 0b001:
+            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(16), 15)
+        # lw (Load Word)
+        elif func3 == 0b010:
+            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(32), 31)
+        # lbu (Load Byte Unsigned)
+        elif func3 == 0b100:
+            registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(32)
+        # lhu (Load Halfword Unsigned)
+        elif func3 == 0b101:
+            registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(32)
+        else:
+            raise ValueError(
+                f"func3 not processable for {OPCODE[opscode]}."
+            )
+        registers[PC] += 4
+
+    # FENCE
+    elif opscode == 0b0001111:
+        registers[PC] += 4
     else:
         raise NotImplemented
 
     # (5) Write back to registers
-    if registers[PC] >= 0x80002A48:
-        print(registers_to_str(registers))
+    # if registers[PC] >= 0x80002A48:
+    #     print(registers_to_str(registers))
     return True
 
 
