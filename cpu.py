@@ -61,8 +61,12 @@ def dins(ins: int, e: int, s: int):
 
 def sext(val: int, bits: int):
     """Performs sign extension by number of bits given."""
-    sb = 1 << (bits - 1)
-    return (val & (sb - 1)) - (val & sb)
+    # sb = 1 << (bits - 1)
+    # return (val & (sb - 1)) - (val & sb)
+    if val >> (bits - 1) == 1:
+        return -((1 << bits) - val)
+    else:
+        return val
 
 
 def fetch32(addr):
@@ -145,12 +149,8 @@ def step():
     # JAL (Jump And Link)
     if opscode == 0b1101111:
         registers[PC] += imm_j(ins)
-        print(bin(imm_j(ins)))
         if rd != 0:
             registers[rd] = registers[PC] + 4
-        print(f"{ABI[rd]}")
-        print(hex(registers[rd]))
-
     # LUI
     elif opscode == 0b0110111:
         registers[rd] = imm_u(ins)
@@ -174,7 +174,6 @@ def step():
             registers[rd] = registers[rs1] + imm_i(ins)
         # SLLI (Shift Left Logical Immediate)
         elif func3 == 0b001:
-            print("rd:", rd)
             registers[rd] = registers[rs1] << (imm_i(ins) & bitmask(5))
         # SLTI (Set Less Than Immediate)
         elif func3 == 0b010:
@@ -189,8 +188,13 @@ def step():
         elif func3 == 0b101:
             if func7 == 0b0100000:
                 sb = registers[rs1] >> 31
-                out = registers[rs1] >> (imm_i(ins) & bitmask(5))
-                registers[rd] |= (bitmask() * sb) << (32 - (imm_i(ins) & 0x1F))
+                if sb == 0:
+                    registers[rd] = registers[rs1] >> (imm_i(ins) & bitmask(5))
+                else:
+                    shamt = imm_i(ins) & bitmask(5)
+                    registers[rd] = (registers[rs1] >> shamt) ^ (
+                        bitmask(shamt) << (32 - shamt)
+                    )
             else:
                 registers[rd] = registers[rs1] >> (imm_i(ins) & bitmask(5))
         # ORI (OR Immediate)
