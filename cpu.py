@@ -9,6 +9,31 @@ from riscv import ABI, OPCODE
 PC = 32
 
 
+class Registers:
+    def __init__(self):
+        self.registers = [0] * 33
+
+    def __getitem__(self, key):
+        return self.registers[key]
+
+    def __setitem__(self, key, value):
+        if key == 0:
+            return
+        self.registers[key] = value & bitmask()
+
+
+def set():
+    """Initializes memory."""
+    global registers, memory
+    # 64k memory
+    memory = b"\x00" * 0x10000
+    # Instruction registers: 31 general purpose registers & 2 special-purpose
+    # registers that each contain 32 bits in RV32 CPU,
+    #
+    # x0 will always be zero while x32 will hold the program counter.
+    registers = Registers()
+
+
 def registers_to_str(registers) -> str:
     """Returns formatted str of all registers."""
     s = ""
@@ -36,10 +61,6 @@ def dins(ins: int, e: int, s: int):
 
 def sext(val: int, bits: int):
     """Performs sign extension by number of bits given."""
-    # if val >> (bits - 1) == 1:
-    #     return -((1 << bits) - val)
-    # else:
-    #     return val
     sb = 1 << (bits - 1)
     return (val & (sb - 1)) - (val & sb)
 
@@ -74,7 +95,7 @@ def imm_j(ins: int) -> int:
 
 def imm_u(ins: int) -> int:
     """U-type instruction format."""
-    return dins(ins, 31, 12) << 12
+    return sext(dins(ins, 31, 12) << 12, 32)
 
 
 def imm_i(ins: int) -> int:
@@ -124,14 +145,27 @@ def step():
     # JAL (Jump And Link)
     if opscode == 0b1101111:
         registers[PC] += imm_j(ins)
+        print(bin(imm_j(ins)))
         if rd != 0:
             registers[rd] = registers[PC] + 4
+        print(f"{ABI[rd]}")
+        print(hex(registers[rd]))
+
+    # LUI
+    elif opscode == 0b0110111:
+        registers[rd] = imm_u(ins)
+        registers[PC] += 4
+
+    # AUIPC
+    elif opscode == 0b0010111:
+        registers[rd] = registers[PC] + imm_u(ins)
+        registers[PC] += 4
 
     # JALR (Jump And Link Register)
     elif opscode == 0b1100111:
         assert dins(ins, 14, 12) == 0
         registers[rd] = registers[PC] + 4
-        registers[PC] = (imm_i(ins) + registers[rs1]) & ~1
+        registers[PC] = (registers[rs1] + imm_i(ins)) & ~1
 
     # ALU
     elif opscode == 0b0010011:
@@ -140,6 +174,7 @@ def step():
             registers[rd] = registers[rs1] + imm_i(ins)
         # SLLI (Shift Left Logical Immediate)
         elif func3 == 0b001:
+            print("rd:", rd)
             registers[rd] = registers[rs1] << (imm_i(ins) & bitmask(5))
         # SLTI (Set Less Than Immediate)
         elif func3 == 0b010:
@@ -169,11 +204,6 @@ def step():
                 f"func3 {hex(func3)} not processable for {OPCODE[opscode]}."
             )
 
-        registers[PC] += 4
-
-    # AUIPC
-    elif opscode == 0b0010111:
-        registers[rd] = registers[PC] + imm_u(ins)
         registers[PC] += 4
 
     # OP
@@ -212,15 +242,17 @@ def step():
         csr = dins(ins, 31, 20)
         # ECALL
         if rd == 0b000 and func3 == 0b000:
-            print("  ecall")
+            print("ecall", ABI[3], registers[3])
+            if registers[3] > 1:
+                raise Exception("FAIL")
         # CSRRW & CSRRWI
         elif (func3 == 0b001) | (func3 == 0b101):
             if csr == 3072:
                 print("CSRRW", rd, rs1, csr)
                 return False
-            if rd != 0:
-                csr = registers[rs1]
-                registers[rd] = csr
+            # if rd != 0:
+            #     csr = registers[rs1]
+            #     registers[rd] = csr
         # CSRRS & CSRRSI
         elif (func3 == 0b010) | (func3 == 0b110):
             registers[rd] = csr
@@ -235,14 +267,8 @@ def step():
 
         registers[PC] += 4
 
-    # LUI
-    elif opscode == 0b0110111:
-        registers[rd] = imm_u(ins)
-        registers[PC] += 4
-
     # BRANCH
     elif opscode == 0b1100011:
-
         # beq | bne | blt | bge | bltu | bgeu
         if (
             (func3 == 0b000 and registers[rs1] == registers[rs2])
@@ -253,6 +279,8 @@ def step():
             | (func3 == 0b111 and registers[rs1] >= registers[rs2])
         ):
             registers[PC] += imm_b(ins)
+            if not imm_b(ins):
+                registers[PC] += 4
         else:
             registers[PC] += 4
 
@@ -279,7 +307,6 @@ def step():
 
     # LOAD
     elif opscode == 0b0000011:
-        print(bin(func3) == 0b010)
         # lb (Load Byte)
         if func3 == 0b000:
             registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(8), 7)
@@ -305,29 +332,21 @@ def step():
     else:
         raise ValueError(f"{OPCODE[opscode]}")
 
+    # if registers[PC] > 0x80002a0c:
+    print(registers_to_str(registers))
     return True
 
 
 if __name__ == "__main__":
-    # Keep some variables around.
-    global memory, registers
-
-    # 64k memory
-    memory = b"\x00" * 0x10000
-    # Instruction registers: 31 general purpose registers & 2 special-purpose
-    # registers that each contain 32 bits in RV32 CPU,
-    #
-    # x0 will always be zero while x32 will hold the program counter.
-    registers = [0] * 33
-
-    for x in glob.glob("modules/riscv-tests/isa/rv32ui-v-*"):
+    for x in glob.glob("modules/riscv-tests/isa/rv32ui-v-lui"):
         if x.endswith(".dump"):
             continue
         print(f"Execute : {x}\n")
+        # Reset memory and registers.
+        set()
         # Reading the elf program header to memory.
         memory = elf_reader(memory, x)
 
         registers[PC] = 0x80000000
-        i = 0
         while step():
             pass
