@@ -85,14 +85,21 @@ def mem32(addr, dat):
 
 def imm_j(ins: int) -> int:
     """J-type instruction format."""
+    # return sext(
+    #     (
+    #         (dins(ins, 31, 31) << 12)
+    #         | (dins(ins, 19, 12) << 11)
+    #         | (dins(ins, 20, 20) << 10)
+    #         | dins(ins, 31, 21)
+    #     )
+    #     << 1,
+    #     21,
+    # )
     return sext(
-        (
-            (dins(ins, 31, 31) << 12)
-            | (dins(ins, 19, 12) << 11)
-            | (dins(ins, 20, 20) << 10)
-            | dins(ins, 31, 21)
-        )
-        << 1,
+        (dins(ins, 32, 31) << 20)
+        | (dins(ins, 30, 21) << 1)
+        | (dins(ins, 21, 20) << 11)
+        | (dins(ins, 19, 12) << 12),
         21,
     )
 
@@ -109,7 +116,7 @@ def imm_i(ins: int) -> int:
 
 def imm_s(ins: int) -> int:
     """S-type instruction format."""
-    return sext(((dins(ins, 31, 25) << 5) | dins(ins, 11, 7)), 11)
+    return sext(((dins(ins, 31, 25) << 5) | dins(ins, 11, 7)), 12)
 
 
 def imm_b(ins: int) -> int:
@@ -148,9 +155,9 @@ def step():
 
     # JAL (Jump And Link)
     if opscode == 0b1101111:
-        registers[PC] += imm_j(ins)
         if rd != 0:
             registers[rd] = registers[PC] + 4
+        registers[PC] += imm_j(ins)
     # LUI
     elif opscode == 0b0110111:
         registers[rd] = imm_u(ins)
@@ -177,10 +184,12 @@ def step():
             registers[rd] = registers[rs1] << (imm_i(ins) & bitmask(5))
         # SLTI (Set Less Than Immediate)
         elif func3 == 0b010:
-            registers[rd] = 1 if registers[rs1] < imm_i(ins) else 0
+            registers[rd] = 1 if sext(registers[rs1], 32) < sext(imm_i(ins), 32) else 0
         # SLTIU (Set Less Than Immediate Unsigned)
         elif func3 == 0b011:
-            registers[rd] = 1 if registers[rs1] < imm_i(ins) else 0
+            registers[rd] = (
+                1 if (registers[rs1] & bitmask()) < (imm_i(ins) & bitmask()) else 0
+            )
         # XORI (Exclusive OR Immediate)
         elif func3 == 0b100:
             registers[rd] = registers[rs1] ^ imm_i(ins)
@@ -221,9 +230,16 @@ def step():
         # SLL
         elif func3 == 0b001:
             registers[rd] = registers[rs1] << (registers[rs2] & bitmask(5))
-        # SLT (Set Less Than) & SLTU (Set Less Than Unsigned)
-        elif func3 == 0b010 or func3 == 0b011:
-            registers[rd] = 1 if registers[rs1] < registers[rs2] else 0
+        # SLT (Set Less Than)
+        elif func3 == 0b010:
+            registers[rd] = (
+                1 if sext(registers[rs1], 32) < sext(registers[rs2], 32) else 0
+            )
+        # SLTU (Set Less Than Unsigned)
+        elif func3 == 0b011:
+            registers[rd] = (
+                1 if (registers[rs1] & bitmask()) < (registers[rs2] & bitmask()) else 0
+            )
         # XOR (Exclusive OR)
         elif func3 == 0b100:
             registers[rd] = registers[rs1] ^ registers[rs2]
@@ -246,17 +262,13 @@ def step():
         csr = dins(ins, 31, 20)
         # ECALL
         if rd == 0b000 and func3 == 0b000:
-            print("ecall", ABI[3], registers[3])
             if registers[3] > 1:
                 raise Exception("FAIL")
         # CSRRW & CSRRWI
         elif (func3 == 0b001) | (func3 == 0b101):
             if csr == 3072:
-                print("CSRRW", rd, rs1, csr)
+                print("CSRRW", rd, rs1, csr, "success")
                 return False
-            # if rd != 0:
-            #     csr = registers[rs1]
-            #     registers[rd] = csr
         # CSRRS & CSRRSI
         elif (func3 == 0b010) | (func3 == 0b110):
             registers[rd] = csr
@@ -277,8 +289,8 @@ def step():
         if (
             (func3 == 0b000 and registers[rs1] == registers[rs2])
             | (func3 == 0b001 and registers[rs1] != registers[rs2])
-            | (func3 == 0b100 and registers[rs1] < registers[rs2])
-            | (func3 == 0b101 and registers[rs1] >= registers[rs2])
+            | (func3 == 0b100 and sext(registers[rs1], 32) < sext(registers[rs2], 32))
+            | (func3 == 0b101 and sext(registers[rs1], 32) >= sext(registers[rs2], 32))
             | (func3 == 0b110 and registers[rs1] < registers[rs2])
             | (func3 == 0b111 and registers[rs1] >= registers[rs2])
         ):
@@ -313,19 +325,19 @@ def step():
     elif opscode == 0b0000011:
         # lb (Load Byte)
         if func3 == 0b000:
-            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(8), 7)
+            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(8), 8)
         # lh (Load Halfword)
         elif func3 == 0b001:
-            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(16), 15)
+            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(16), 16)
         # lw (Load Word)
         elif func3 == 0b010:
-            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(32), 31)
+            registers[rd] = fetch32(registers[rs1] + imm_i(ins))
         # lbu (Load Byte Unsigned)
         elif func3 == 0b100:
-            registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(32)
+            registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(8)
         # lhu (Load Halfword Unsigned)
         elif func3 == 0b101:
-            registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(32)
+            registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(16)
         else:
             raise ValueError(f"func3 not processable for {OPCODE[opscode]}.")
         registers[PC] += 4
@@ -333,16 +345,18 @@ def step():
     # FENCE
     elif opscode == 0b0001111:
         registers[PC] += 4
+    # A
+    elif opscode == 0b0101111:
+        registers[PC] += 4
     else:
         raise ValueError(f"{OPCODE[opscode]}")
 
-    # if registers[PC] > 0x80002a0c:
-    print(registers_to_str(registers))
+    # print(registers_to_str(registers))
     return True
 
 
 if __name__ == "__main__":
-    for x in glob.glob("modules/riscv-tests/isa/rv32ui-v-lui"):
+    for x in glob.glob("modules/riscv-tests/isa/rv32ui-p-jalr"):
         if x.endswith(".dump"):
             continue
         print(f"Execute : {x}\n")
