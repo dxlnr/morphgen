@@ -61,8 +61,6 @@ def dins(ins: int, e: int, s: int):
 
 def sext(val: int, bits: int):
     """Performs sign extension by number of bits given."""
-    # sb = 1 << (bits - 1)
-    # return (val & (sb - 1)) - (val & sb)
     if val >> (bits - 1) == 1:
         return -((1 << bits) - val)
     else:
@@ -131,6 +129,7 @@ def imm_b(ins: int) -> int:
         << 1,
         12,
     )
+    # return sext((dins(ins, 32, 31)<<12) | (dins(ins, 30, 25)<<5) | (dins(ins, 11, 8)<<1) | (dins(ins, 8, 7)<<11), 13)
 
 
 def step():
@@ -170,10 +169,10 @@ def step():
 
     # JALR (Jump And Link Register)
     elif opscode == 0b1100111:
-        assert dins(ins, 14, 12) == 0
-        registers[rd] = registers[PC] + 4
-        registers[PC] = (registers[rs1] + imm_i(ins)) & ~1
+        wpc = (registers[rs1] + imm_i(ins)) & ~1
 
+        registers[rd] = registers[PC] + 4
+        registers[PC] = wpc
     # ALU
     elif opscode == 0b0010011:
         # ADDI (Add Immediate)
@@ -263,7 +262,7 @@ def step():
         # ECALL
         if rd == 0b000 and func3 == 0b000:
             if registers[3] > 1:
-                raise Exception("FAIL")
+                raise Exception("failure with current test.")
         # CSRRW & CSRRWI
         elif (func3 == 0b001) | (func3 == 0b101):
             if csr == 3072:
@@ -351,12 +350,11 @@ def step():
     else:
         raise ValueError(f"{OPCODE[opscode]}")
 
-    # print(registers_to_str(registers))
     return True
 
 
 if __name__ == "__main__":
-    for x in glob.glob("modules/riscv-tests/isa/rv32ui-p-jalr"):
+    for x in glob.glob("modules/riscv-tests/isa/rv32ui-p-fence_i"):
         if x.endswith(".dump"):
             continue
         print(f"Execute : {x}\n")
