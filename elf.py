@@ -2,7 +2,7 @@
 from elftools.elf.elffile import ELFFile
 
 
-def read_to_mem(memory, data, addr):
+def write_to_mem(memory, data, addr):
     """Reads opscode from elf segment & bumps it to memory.
 
     :param memory:
@@ -24,5 +24,5 @@ def elf_reader(memory, file: str):
             elf = ELFFile(f)
 
             for s in elf.iter_segments(type="PT_LOAD"):
-                memory = read_to_mem(memory, s.data(), s.header.p_paddr)
+                memory = write_to_mem(memory, s.data(), s.header.p_paddr)
     return memory

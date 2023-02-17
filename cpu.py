@@ -5,9 +5,6 @@ import glob
 from elf import elf_reader
 from riscv import ABI, OPCODE
 
-# Programm Counter
-PC = 32
-
 
 class Registers:
     def __init__(self):
@@ -24,7 +21,7 @@ class Registers:
 
 def set():
     """Initializes memory."""
-    global registers, memory
+    global registers, memory, PC
     # 64k memory
     memory = b"\x00" * 0x10000
     # Instruction registers: 31 general purpose registers & 2 special-purpose
@@ -32,6 +29,8 @@ def set():
     #
     # x0 will always be zero while x32 will hold the program counter.
     registers = Registers()
+    # Set PC to 32
+    PC = 32
 
 
 def registers_to_str(registers) -> str:
@@ -67,6 +66,14 @@ def sext(val: int, bits: int):
         return val
 
 
+def wmem(addr, data):
+    """Write back to memory."""
+    global memory
+    addr -= 0x80000000
+    assert addr >= 0 and addr < len(memory)
+    memory = memory[:addr] + data + memory[addr + len(data) :]
+
+
 def fetch32(addr):
     addr -= 0x80000000
     if addr < 0 or addr >= len(memory):
@@ -74,25 +81,8 @@ def fetch32(addr):
     return struct.unpack("I", memory[addr : addr + 4])[0]
 
 
-def mem32(addr, dat):
-    global memory
-    addr -= 0x80000000
-    assert addr >= 0 and addr < len(memory)
-    memory = memory[:addr] + dat + memory[addr + len(dat) :]
-
-
 def imm_j(ins: int) -> int:
     """J-type instruction format."""
-    # return sext(
-    #     (
-    #         (dins(ins, 31, 31) << 12)
-    #         | (dins(ins, 19, 12) << 11)
-    #         | (dins(ins, 20, 20) << 10)
-    #         | dins(ins, 31, 21)
-    #     )
-    #     << 1,
-    #     21,
-    # )
     return sext(
         (dins(ins, 32, 31) << 20)
         | (dins(ins, 30, 21) << 1)
@@ -129,7 +119,6 @@ def imm_b(ins: int) -> int:
         << 1,
         12,
     )
-    # return sext((dins(ins, 32, 31)<<12) | (dins(ins, 30, 25)<<5) | (dins(ins, 11, 8)<<1) | (dins(ins, 8, 7)<<11), 13)
 
 
 def step():
@@ -141,40 +130,38 @@ def step():
     #
     # Bitwise ops to decode the instruction.
     opscode = dins(ins, 6, 0)
-    # Keep track where the program is.
-    print(f"  {hex(registers[PC])} : {hex(ins)} : {OPCODE[opscode]}")
     # Compute register destination.
     rd = dins(ins, 11, 7)
     # Compute register sources.
     rs1 = dins(ins, 19, 15)
     rs2 = dins(ins, 24, 20)
-    #
+    # Get instruction defining encodings.
     func3 = dins(ins, 14, 12)
     func7 = dins(ins, 31, 25)
 
-    # JAL (Jump And Link)
-    if opscode == 0b1101111:
+    #
+    # (3) Execution
+    #
+    if opscode == OPCODE["JAL"]:
         if rd != 0:
             registers[rd] = registers[PC] + 4
         registers[PC] += imm_j(ins)
-    # LUI
-    elif opscode == 0b0110111:
+
+    elif opscode == OPCODE["LUI"]:
         registers[rd] = imm_u(ins)
         registers[PC] += 4
 
-    # AUIPC
-    elif opscode == 0b0010111:
+    elif opscode == OPCODE["AUIPC"]:
         registers[rd] = registers[PC] + imm_u(ins)
         registers[PC] += 4
 
-    # JALR (Jump And Link Register)
-    elif opscode == 0b1100111:
+    elif opscode == OPCODE["JALR"]:
         wpc = (registers[rs1] + imm_i(ins)) & ~1
 
         registers[rd] = registers[PC] + 4
         registers[PC] = wpc
-    # ALU
-    elif opscode == 0b0010011:
+
+    elif opscode == OPCODE["ALU"]:
         # ADDI (Add Immediate)
         if func3 == 0b000:
             registers[rd] = registers[rs1] + imm_i(ins)
@@ -218,8 +205,7 @@ def step():
 
         registers[PC] += 4
 
-    # OP
-    elif opscode == 0b0110011:
+    elif opscode == OPCODE["OP"]:
         # ADD & SUB
         if func3 == 0b000:
             if func7 == 0b0:
@@ -242,9 +228,14 @@ def step():
         # XOR (Exclusive OR)
         elif func3 == 0b100:
             registers[rd] = registers[rs1] ^ registers[rs2]
-        # SRL (Shift Right Logical) & SRA (Shift Right Arithmetic)
+        # SRA (Shift Right Arithmetic) & SRL (Shift Right Logical)
         elif func3 == 0b101:
-            registers[rd] = registers[rs1] >> (registers[rs2] & bitmask(5))
+            if func7 == 0b0100000:
+                registers[rd] = sext(registers[rs1], 32) >> sext(
+                    (registers[rs2] & bitmask(5)), 32
+                )
+            else:
+                registers[rd] = registers[rs1] >> (registers[rs2] & bitmask(5))
         # OR
         elif func3 == 0b110:
             registers[rd] = registers[rs1] | registers[rs2]
@@ -256,17 +247,16 @@ def step():
 
         registers[PC] += 4
 
-    # SYSTEM
-    elif opscode == 0b1110011:
+    elif opscode == OPCODE["SYSTEM"]:
         csr = dins(ins, 31, 20)
         # ECALL
         if rd == 0b000 and func3 == 0b000:
             if registers[3] > 1:
-                raise Exception("failure with current test.")
+                raise Exception(f"failure in current test. gp {registers[3]}")
         # CSRRW & CSRRWI
         elif (func3 == 0b001) | (func3 == 0b101):
             if csr == 3072:
-                print("CSRRW", rd, rs1, csr, "success")
+                print("  ecall", rd, rs1, csr, "success")
                 return False
         # CSRRS & CSRRSI
         elif (func3 == 0b010) | (func3 == 0b110):
@@ -282,8 +272,7 @@ def step():
 
         registers[PC] += 4
 
-    # BRANCH
-    elif opscode == 0b1100011:
+    elif opscode == OPCODE["BRANCH"]:
         # beq | bne | blt | bge | bltu | bgeu
         if (
             (func3 == 0b000 and registers[rs1] == registers[rs2])
@@ -299,29 +288,32 @@ def step():
         else:
             registers[PC] += 4
 
-    # STORE
+    elif opscode == OPCODE["FENCE"]:
+        registers[PC] += 4
+    #
+    # (4) Memory Access
+    #
     elif opscode == 0b0100011:
         # sb (Store Byte)
         if func3 == 0b000:
-            mem32(
+            wmem(
                 registers[rs1] + imm_s(ins),
                 struct.pack("B", registers[rs2] & bitmask(8)),
             )
         # sh (Store Halfword)
         elif func3 == 0b001:
-            mem32(
+            wmem(
                 registers[rs1] + imm_s(ins),
                 struct.pack("H", registers[rs2] & bitmask(16)),
             )
         # sw (Store Word)
         elif func3 == 0b010:
-            mem32(registers[rs1] + imm_s(ins), struct.pack("I", registers[rs2]))
+            wmem(registers[rs1] + imm_s(ins), struct.pack("I", registers[rs2]))
         else:
             raise ValueError(f"func3 not processable for {OPCODE[opscode]}.")
         registers[PC] += 4
 
-    # LOAD
-    elif opscode == 0b0000011:
+    elif opscode == OPCODE["LOAD"]:
         # lb (Load Byte)
         if func3 == 0b000:
             registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(8), 8)
@@ -341,28 +333,26 @@ def step():
             raise ValueError(f"func3 not processable for {OPCODE[opscode]}.")
         registers[PC] += 4
 
-    # FENCE
-    elif opscode == 0b0001111:
-        registers[PC] += 4
-    # A
-    elif opscode == 0b0101111:
-        registers[PC] += 4
     else:
         raise ValueError(f"{OPCODE[opscode]}")
-
+    #
+    # (5) Write Back
+    #
     return True
 
 
 if __name__ == "__main__":
-    for x in glob.glob("modules/riscv-tests/isa/rv32ui-p-fence_i"):
+    for x in glob.glob("modules/riscv-tests/isa/rv32ui-p-*"):
         if x.endswith(".dump"):
             continue
-        print(f"Execute : {x}\n")
+        print(f"Execute : {x}")
         # Reset memory and registers.
         set()
         # Reading the elf program header to memory.
         memory = elf_reader(memory, x)
 
         registers[PC] = 0x80000000
+        inscnt = 0
         while step():
-            pass
+            inscnt += 1
+        print("  ran %d instructions\n" % inscnt)
