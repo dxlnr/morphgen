@@ -123,9 +123,11 @@ def imm_b(ins: int) -> int:
 
 def step():
     """Process instructions."""
+    #
     # (1) Instruction Fetch
+    #
     ins = fetch32(registers[PC])
-
+    #
     # (2) Instruction Decode
     #
     # Bitwise ops to decode the instruction.
@@ -185,9 +187,7 @@ def step():
             registers[rd] = 1 if sext(registers[rs1], 32) < sext(imm, 32) else 0
         # SLTIU (Set Less Than Immediate Unsigned)
         elif func3 == 0b011:
-            registers[rd] = (
-                1 if (registers[rs1] & bm()) < (imm & bm()) else 0
-            )
+            registers[rd] = 1 if (registers[rs1] & bm()) < (imm & bm()) else 0
         # XORI (Exclusive OR Immediate)
         elif func3 == 0b100:
             registers[rd] = registers[rs1] ^ imm

@@ -12,6 +12,7 @@ Please be aware that this can take a couple of hourse depending on your system.
 sudo apt-get install autoconf automake autotools-dev curl python3 libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev libexpat-dev ninja-build
 
 # Installation (Newlib)
+cd riscv-gnu-toolchain
 ./configure --prefix=/opt/riscv
 make
 
@@ -20,9 +21,6 @@ make
 make linux
 
 # Adding to Path
-# bash
-export RISCV=/opt/riscv
-export PATH=$PATH:$RISCV/bin
 # fish
 set RISCV /opt/riscv $RISCV
 set PATH $RISCV/bin $PATH
