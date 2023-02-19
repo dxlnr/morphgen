@@ -16,7 +16,7 @@ class Registers:
     def __setitem__(self, key, value):
         if key == 0:
             return
-        self.registers[key] = value & bitmask()
+        self.registers[key] = value & bm()
 
 
 def set():
@@ -43,8 +43,8 @@ def registers_to_str(registers) -> str:
     return s
 
 
-def bitmask(bits: int = 32) -> int:
-    """Returns a bitmask based on number of bits."""
+def bm(bits: int = 32) -> int:
+    """Returns a bitmask based for the number of bits given."""
     return 2**bits - 1
 
 
@@ -139,82 +139,90 @@ def step():
     func3 = dins(ins, 14, 12)
     func7 = dins(ins, 31, 25)
 
+    write_new_pc = opscode in [OPCODE["JAL"], OPCODE["JALR"], OPCODE["BRANCH"]]
+    imm = {
+        OPCODE["LUI"]: imm_u(ins),
+        OPCODE["AUIPC"]: imm_u(ins),
+        OPCODE["JAL"]: imm_j(ins),
+        OPCODE["JALR"]: imm_i(ins),
+        OPCODE["BRANCH"]: imm_b(ins),
+        OPCODE["LOAD"]: imm_i(ins),
+        OPCODE["STORE"]: imm_s(ins),
+        OPCODE["ALU"]: imm_i(ins),
+        OPCODE["OP"]: rs2,
+        OPCODE["SYSTEM"]: imm_i(ins),
+        OPCODE["FENCE"]: imm_i(ins),
+    }[opscode]
+
     #
     # (3) Execution
     #
     if opscode == OPCODE["JAL"]:
         if rd != 0:
             registers[rd] = registers[PC] + 4
-        registers[PC] += imm_j(ins)
+        registers[PC] += imm
 
     elif opscode == OPCODE["LUI"]:
-        registers[rd] = imm_u(ins)
-        registers[PC] += 4
+        registers[rd] = imm
 
     elif opscode == OPCODE["AUIPC"]:
-        registers[rd] = registers[PC] + imm_u(ins)
-        registers[PC] += 4
+        registers[rd] = registers[PC] + imm
 
     elif opscode == OPCODE["JALR"]:
-        wpc = (registers[rs1] + imm_i(ins)) & ~1
-
+        wpc = (registers[rs1] + imm) & ~1
         registers[rd] = registers[PC] + 4
         registers[PC] = wpc
 
     elif opscode == OPCODE["ALU"]:
         # ADDI (Add Immediate)
         if func3 == 0b000:
-            registers[rd] = registers[rs1] + imm_i(ins)
+            registers[rd] = registers[rs1] + imm
         # SLLI (Shift Left Logical Immediate)
         elif func3 == 0b001:
-            registers[rd] = registers[rs1] << (imm_i(ins) & bitmask(5))
+            registers[rd] = registers[rs1] << (imm & bm(5))
         # SLTI (Set Less Than Immediate)
         elif func3 == 0b010:
-            registers[rd] = 1 if sext(registers[rs1], 32) < sext(imm_i(ins), 32) else 0
+            registers[rd] = 1 if sext(registers[rs1], 32) < sext(imm, 32) else 0
         # SLTIU (Set Less Than Immediate Unsigned)
         elif func3 == 0b011:
             registers[rd] = (
-                1 if (registers[rs1] & bitmask()) < (imm_i(ins) & bitmask()) else 0
+                1 if (registers[rs1] & bm()) < (imm & bm()) else 0
             )
         # XORI (Exclusive OR Immediate)
         elif func3 == 0b100:
-            registers[rd] = registers[rs1] ^ imm_i(ins)
+            registers[rd] = registers[rs1] ^ imm
         # SRLI (Shift Right Logical Immediate) & SRAI (Shift Right Arithmetic Immediate)
         elif func3 == 0b101:
             if func7 == 0b0100000:
                 sb = registers[rs1] >> 31
                 if sb == 0:
-                    registers[rd] = registers[rs1] >> (imm_i(ins) & bitmask(5))
+                    registers[rd] = registers[rs1] >> (imm & bm(5))
                 else:
-                    shamt = imm_i(ins) & bitmask(5)
+                    shamt = imm & bm(5)
                     registers[rd] = (registers[rs1] >> shamt) ^ (
-                        bitmask(shamt) << (32 - shamt)
+                        bm(shamt) << (32 - shamt)
                     )
             else:
-                registers[rd] = registers[rs1] >> (imm_i(ins) & bitmask(5))
+                registers[rd] = registers[rs1] >> (imm & bm(5))
         # ORI (OR Immediate)
         elif func3 == 0b110:
-            registers[rd] = registers[rs1] | imm_i(ins)
+            registers[rd] = registers[rs1] | imm
         # ANDI (AND Immediate)
         elif func3 == 0b111:
-            registers[rd] = registers[rs1] & imm_i(ins)
+            registers[rd] = registers[rs1] & imm
         else:
-            raise ValueError(
-                f"func3 {hex(func3)} not processable for {OPCODE[opscode]}."
-            )
-
-        registers[PC] += 4
+            raise ValueError(f"ALU instruction failure.")
 
     elif opscode == OPCODE["OP"]:
         # ADD & SUB
         if func3 == 0b000:
             if func7 == 0b0:
-                registers[rd] = (registers[rs1] + registers[rs2]) & bitmask()
+                registers[rd] = (registers[rs1] + registers[rs2]) & bm()
             else:
-                registers[rd] = (registers[rs1] - registers[rs2]) & bitmask()
+                registers[rd] = (registers[rs1] - registers[rs2]) & bm()
         # SLL
         elif func3 == 0b001:
-            registers[rd] = registers[rs1] << (registers[rs2] & bitmask(5))
+            registers[rd] = registers[rs1] << (registers[rs2] & bm(5))
         # SLT (Set Less Than)
         elif func3 == 0b010:
             registers[rd] = (
@@ -223,7 +231,7 @@ def step():
         # SLTU (Set Less Than Unsigned)
         elif func3 == 0b011:
             registers[rd] = (
-                1 if (registers[rs1] & bitmask()) < (registers[rs2] & bitmask()) else 0
+                1 if (registers[rs1] & bm()) < (registers[rs2] & bm()) else 0
             )
         # XOR (Exclusive OR)
         elif func3 == 0b100:
@@ -232,10 +240,10 @@ def step():
         elif func3 == 0b101:
             if func7 == 0b0100000:
                 registers[rd] = sext(registers[rs1], 32) >> sext(
-                    (registers[rs2] & bitmask(5)), 32
+                    (registers[rs2] & bm(5)), 32
                 )
             else:
-                registers[rd] = registers[rs1] >> (registers[rs2] & bitmask(5))
+                registers[rd] = registers[rs1] >> (registers[rs2] & bm(5))
         # OR
         elif func3 == 0b110:
             registers[rd] = registers[rs1] | registers[rs2]
@@ -243,9 +251,7 @@ def step():
         elif func3 == 0b111:
             registers[rd] = registers[rs1] & registers[rs2]
         else:
-            raise ValueError
-
-        registers[PC] += 4
+            raise ValueError(f"OP instruction failure.")
 
     elif opscode == OPCODE["SYSTEM"]:
         csr = dins(ins, 31, 20)
@@ -263,14 +269,10 @@ def step():
             registers[rd] = csr
         # CSRRC & CSRRCI
         elif (func3 == 0b011) | (func3 == 0b111):
-            csr = dins(ins, 31, 20) & ~registers[rs1]
+            csr &= ~registers[rs1]
             registers[rd] = csr
         else:
-            raise ValueError(
-                f"func3 {bin(func3)} not processable for {OPCODE[opscode]}."
-            )
-
-        registers[PC] += 4
+            raise ValueError(f"SYSTEM instruction failure.")
 
     elif opscode == OPCODE["BRANCH"]:
         # beq | bne | blt | bge | bltu | bgeu
@@ -282,62 +284,57 @@ def step():
             | (func3 == 0b110 and registers[rs1] < registers[rs2])
             | (func3 == 0b111 and registers[rs1] >= registers[rs2])
         ):
-            registers[PC] += imm_b(ins)
-            if not imm_b(ins):
+            registers[PC] += imm
+            if not imm:
                 registers[PC] += 4
         else:
             registers[PC] += 4
 
-    elif opscode == OPCODE["FENCE"]:
-        registers[PC] += 4
     #
     # (4) Memory Access
     #
-    elif opscode == 0b0100011:
+    elif opscode == OPCODE["STORE"]:
         # sb (Store Byte)
         if func3 == 0b000:
             wmem(
-                registers[rs1] + imm_s(ins),
-                struct.pack("B", registers[rs2] & bitmask(8)),
+                registers[rs1] + imm,
+                struct.pack("B", registers[rs2] & bm(8)),
             )
         # sh (Store Halfword)
         elif func3 == 0b001:
             wmem(
-                registers[rs1] + imm_s(ins),
-                struct.pack("H", registers[rs2] & bitmask(16)),
+                registers[rs1] + imm,
+                struct.pack("H", registers[rs2] & bm(16)),
             )
         # sw (Store Word)
         elif func3 == 0b010:
-            wmem(registers[rs1] + imm_s(ins), struct.pack("I", registers[rs2]))
+            wmem(registers[rs1] + imm, struct.pack("I", registers[rs2]))
         else:
-            raise ValueError(f"func3 not processable for {OPCODE[opscode]}.")
-        registers[PC] += 4
+            raise ValueError(f"STORE instruction failure.")
 
     elif opscode == OPCODE["LOAD"]:
         # lb (Load Byte)
         if func3 == 0b000:
-            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(8), 8)
+            registers[rd] = sext(fetch32(registers[rs1] + imm) & bm(8), 8)
         # lh (Load Halfword)
         elif func3 == 0b001:
-            registers[rd] = sext(fetch32(registers[rs1] + imm_i(ins)) & bitmask(16), 16)
+            registers[rd] = sext(fetch32(registers[rs1] + imm) & bm(16), 16)
         # lw (Load Word)
         elif func3 == 0b010:
-            registers[rd] = fetch32(registers[rs1] + imm_i(ins))
+            registers[rd] = fetch32(registers[rs1] + imm)
         # lbu (Load Byte Unsigned)
         elif func3 == 0b100:
-            registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(8)
+            registers[rd] = fetch32(registers[rs1] + imm) & bm(8)
         # lhu (Load Halfword Unsigned)
         elif func3 == 0b101:
-            registers[rd] = fetch32(registers[rs1] + imm_i(ins)) & bitmask(16)
+            registers[rd] = fetch32(registers[rs1] + imm) & bm(16)
         else:
-            raise ValueError(f"func3 not processable for {OPCODE[opscode]}.")
-        registers[PC] += 4
-
-    else:
-        raise ValueError(f"{OPCODE[opscode]}")
+            raise ValueError(f"LOAD instruction failure.")
     #
     # (5) Write Back
     #
+    if not write_new_pc:
+        registers[PC] += 4
     return True
 
 
