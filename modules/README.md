@@ -20,8 +20,7 @@ make
 ./configure --prefix=/opt/riscv
 make linux
 
-# Adding to Path
-# fish
+# Adding to Path (fish)
 set RISCV /opt/riscv $RISCV
 set PATH $RISCV/bin $PATH
 ```
