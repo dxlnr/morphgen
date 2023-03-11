@@ -4,3 +4,7 @@ Small example for investigating ELF. Run:
 
 Linux Programmers Manual
     $ man elf
+
+
+Compile to RISCV assembly using riscv-gnu-toolchain
+    $ riscv64-unknown-linux-gnu-gcc -S -o minimal.s minimal.c  

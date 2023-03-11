@@ -14,6 +14,10 @@ OPCODE = {
     "SYSTEM": 0b1110011,
 }
 
+ISA = {
+    "addi": 0b00000000,
+}
+
 ABI = (
     ["x0", "ra", "sp", "gp", "tp"]
     + ["t%d" % i for i in range(0, 3)]

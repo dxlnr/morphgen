@@ -7,3 +7,6 @@
 [submodule "modules/iverilog"]
 	path = modules/iverilog
 	url = https://github.com/steveicarus/iverilog.git
+[submodule "modules/qemu"]
+	path = modules/qemu
+	url = https://gitlab.com/qemu-project/qemu.git
