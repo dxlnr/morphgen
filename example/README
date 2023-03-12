@@ -8,3 +8,6 @@ Linux Programmers Manual
 
 Compile to RISCV assembly using riscv-gnu-toolchain
     $ riscv64-unknown-linux-gnu-gcc -S -o minimal.s minimal.c  
+
+
+    $ riscv32-unknown-elf-objectdump -S minimal
