@@ -7,7 +7,11 @@ Linux Programmers Manual
 
 
 Compile to RISCV assembly using riscv-gnu-toolchain
-    $ riscv64-unknown-linux-gnu-gcc -S -o minimal.s minimal.c  
+    
+    Running a riscv compile program on linux using qemu (pretty neat)
+    $ sudo apt-get install qemu-user
+    $ qemu-riscv32 ./minimal
 
+    $ riscv32-unknown-elf-gcc -S -o minimal.s minimal.c  
+    $ riscv32-unknown-elf-objdump -d ./minimal
 
-    $ riscv32-unknown-elf-objectdump -S minimal

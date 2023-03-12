@@ -258,7 +258,7 @@ def step():
         # ECALL
         if rd == 0b000 and func3 == 0b000:
             if registers[3] > 1:
-                raise Exception(f"failure in current test. gp {registers[3]}")
+                raise Exception(f"Failure in current test. gp {registers[3]}")
         # CSRRW & CSRRWI
         elif (func3 == 0b001) | (func3 == 0b101):
             if csr == 3072:

@@ -3,7 +3,7 @@ import sys
 import re
 from enum import Enum
 
-from riscv import ISA
+from riscv import ISA, REG
 
 
 class Program(Enum):
@@ -11,20 +11,6 @@ class Program(Enum):
     INSTRUCTION = 2
     DIRECTIVE = 3
     COMMENT = 4
-
-
-REG = {
-    "sp": 0b00010,
-    "s0": 0b01000,
-    "a0": 10,
-    "a1": 11,
-    "a2": 12,
-    "a3": 13,
-    "a4": 14,
-    "a5": 15,
-    "a6": 16,
-    "a7": 17,
-}
 
 
 def bm(bits: int = 32) -> int:
@@ -62,12 +48,15 @@ def parse(content: str):
 
 def encode(ins: list[str]) -> int:
     code = ins[1]
-    if code[0] == "addi":
-        value = two_compl(int(code[3]), 12)
+    if code[0] == "addi" or code[0] == "mv":
+        if code[0] == "mv":
+            value = 0
+        else:
+            value = two_compl(int(code[3]), 12)
         res = (
-            ISA["addi"][0]
+            ISA[code[0]][0]
             + (REG[code[1]] << 7)
-            + (ISA["addi"][1] << 12)
+            + (ISA[code[0]][1] << 12)
             + (REG[code[2]] << 15)
             + (value << 20)
         )
@@ -86,10 +75,10 @@ def encode(ins: list[str]) -> int:
     if code[0] == "li":
         value = two_compl(int(code[2]), 12)
         res = (
-            ISA["li"][0]
+            ISA[code[0]][0]
             + (REG[code[1]] << 7)
-            + (ISA["li"][1] << 12)
-            + (ISA["li"][2] << 15)
+            + (ISA[code[0]][1] << 12)
+            + (ISA[code[0]][2] << 15)
             + (value << 20)
         )
 
@@ -103,7 +92,33 @@ def encode(ins: list[str]) -> int:
             + (value << 20)
         )
 
-    print("Ins : ", hex(res))
+    if code[0] == "add" or code[0] == "sub":
+        res = (
+            ISA[code[0]][0]
+            + (REG[code[1]] << 7)
+            + (ISA[code[0]][1] << 12)
+            + (REG[code[2]] << 15)
+            + (REG[code[3]] << 20)
+            + (ISA[code[0]][2] << 25)
+        )
+
+    if code[0] == "jalr": 
+        value = two_compl(int(code[2]), 12)
+        res = (
+            ISA[code[0]][0]
+            + (REG[code[1]] << 7)
+            + (ISA[code[0]][1] << 12)
+            + (REG[code[3]] << 15)
+            + (value << 20)
+        )
+
+    if code[0] == "jr":
+        res = ISA[code[0]][0] + (REG[code[1]] << 7) + (ISA[code[0]][1] << 12)
+ 
+    if code[0] == "call":
+        # res = ISA[code[0]][0] + 
+        pass
+
     return res
 
 
@@ -120,7 +135,8 @@ def main():
     for line in t:
         print(line)
         if line[0] == Program.INSTRUCTION:
-            encode(line)
+            res = encode(line)
+            print("Ins : ", hex(res))
     print("")
 
 
