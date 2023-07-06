@@ -10,3 +10,9 @@
 [submodule "modules/qemu"]
 	path = modules/qemu
 	url = https://gitlab.com/qemu-project/qemu.git
+[submodule "modules/yosys"]
+	path = modules/yosys
+	url = https://github.com/YosysHQ/yosys.git
+[submodule "modules/prjxray"]
+	path = modules/prjxray
+	url = git@github.com:f4pga/prjxray.git

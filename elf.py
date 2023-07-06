@@ -12,7 +12,7 @@ def write_to_mem(memory, data, addr):
     if addr != 0:
         addr -= 0x80000000
     assert addr < len(memory)
-    memory = memory[:addr] + data + memory[addr + len(data) :]
+    memory = memory[:addr] + data + memory[addr + len(data):]
 
     return memory
 

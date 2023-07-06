@@ -18,3 +18,6 @@ Compile to RISCV assembly using riscv-gnu-toolchain
     $ riscv32-unknown-eft-objdump -D minimal.o
     $ riscv32-unknown-elf-objcopy -O binary minimal.o minimal
 
+
+ARM
+    $ arm-linux-gnueabi-gcc -S testfs/minimal.c -o testfs/minimal_arm.s
