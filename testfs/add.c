@@ -5,6 +5,8 @@ int sum(int one, int two) {
 }
 
 int main() {
-    printf("The sum is: %d\n", sum(1, 2));
-    return 0;
+  int res = sum(1, 2);
+
+  printf("res: %d\n", res);
+  return 0;
 }

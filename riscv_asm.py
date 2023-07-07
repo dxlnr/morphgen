@@ -135,13 +135,14 @@ def encode(enc: list[int], ins: list[str]) -> int:
 def main():
     try:
         x = sys.argv[1]
-    except:
+    except ValueError:
         raise ValueError("No input file provided.")
 
     print(f"Read : {x}")
     content = open(x, "r").read()
 
     t = parse(content)
+    print(t)
     enc = list()
     for line in t:
         if line[0] == Program.INSTRUCTION:
@@ -150,7 +151,7 @@ def main():
     # Print results.
     print("    Instructions:")
     for e in enc:
-        print(f"\t%08x " % e)
+        print("\t%08x " % e)
 
 
 if __name__ == "__main__":

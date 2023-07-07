@@ -22,6 +22,10 @@ Run the Assembler via:
 python riscv_asm.py testfs/riscv_minimal.s
 ``` 
 
+```bash
+arm-linux-gnueabi-gcc -c -o subtract.o testfs/subtract.c 
+```
+
 ## ARM
 
 Cross-Compilation
