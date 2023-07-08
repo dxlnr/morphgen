@@ -28,12 +28,9 @@ def two_compl(val: int, bits: int = 32):
 
 def parse(content: str):
     """Reads the assmbly code and returns list of tokenized symbols."""
-    program = list()
-    lines = content.split("\n")
-    pc = 0
-    for line in lines:
+    program, pc = [], 0
+    for line in content.split("\n"):
         sl = list(filter(None, re.split(r"\t+|,| |\(|\)", line)))
-
         if sl:
             if re.match("\.+", sl[0]):
                 program.append((Program.DIRECTIVE, sl))
@@ -142,7 +139,6 @@ def main():
     content = open(x, "r").read()
 
     t = parse(content)
-    print(t)
     enc = list()
     for line in t:
         if line[0] == Program.INSTRUCTION:
