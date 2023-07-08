@@ -44,6 +44,8 @@ Source -> Preprocessor -> Compiler -> assembly (.asm) -> Assembler -> object (.o
 
 #### ARMv
 
+- [ARM Docs A32](https://developer.arm.com/documentation/ddi0597/2023-06/A32-Instructions-by-Encoding)
+
 #### RISC-V
 
 - Course: [Computer Systems Organization](https://nyu-cso.github.io/index.html)
