@@ -1,6 +1,5 @@
 # Morphgen
 
-
 ## RISC-V
 
 Implementing a Processor using the [RISC-V](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) instruction set. 
@@ -22,23 +21,26 @@ Run the Assembler via:
 python riscv_asm.py testfs/riscv_minimal.s
 ``` 
 
-```bash
-arm-linux-gnueabi-gcc -c -o subtract.o testfs/subtract.c 
-```
-
 ## ARM
 
-Cross-Compilation
+**Prequisits**: Cross-Compiler (if you are not on a ARM architecture anyway)
 ```bash
 sudo apt install gcc gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu make
 ```
 
 ### ARM Assembler
 ```bash
-python arm_asm.py testfs/arm_minimal.s
+python arm_asm.py testfs/subtract.s
+```
+
+Run the bash script to investigate the desired out of the assembler.
+```bash
+./run_arm32_tests.sh
 ```
 
 ### Additional Material
+
+Source -> Preprocessor -> Compiler -> assembly (.asm) -> Assembler -> object (.o) -> (+ Libraries) Linker -> Executable
 
 #### ARMv
 
