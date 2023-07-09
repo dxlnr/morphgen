@@ -124,4 +124,4 @@ dmypy.json
 cython_debug/
 
 # Resources
-resources/*
+# resources/*

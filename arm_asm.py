@@ -22,6 +22,10 @@ class REGISTERS(Enum):
     lr = 14
     pc = 15
 
+    @classmethod
+    def as_strs(cls):
+        return list(map(lambda c: c.name, cls))
+
 
 class CONDITION(Enum):
     EQ = 0b0000  # Equal
@@ -90,28 +94,46 @@ def asm32(tokens):
     :returns: A list of 32 bit machine code.
     :raises: RuntimeError if the instruction is not supported.
     """
+    reg_strs = frozenset(REGISTERS.as_strs())
     ins = []
     for t in tokens:
+        print(t)
         if t[0] == Program.INSTRUCTION:
             if t[1][0] == OPCODE.ADD.value:
                 pass
             elif t[1][0] == OPCODE.SUB.value:
                 pass
             elif t[1][0] == OPCODE.STR.value:
+                print(t[1])
                 # 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 ... 0
                 # != 1111	   0  1	 0	P  U o2	 W o1 Rn	      Rt          imm12
+                imm = list(filter(None, [re.findall(r"#(-\d+)", s) for s in t[1]]))[0][
+                    0
+                ]
+                u_bit = 0 if int(imm) < 0 else 1
 
+                rs = [s for s in t[1] if s in reg_strs]
                 if "[" in t[1] and "]" in t[1] and "!" not in t[1]:
                     # STR{<c>}{<q>} <Rt>, [<Rn> {, #{+/-}<imm>}] immediate offset: P=0, W=0
+                    ins.append(
+                        abs(int(imm))
+                        + (REGISTERS[str(rs[0])].value << 12)
+                        + (REGISTERS[str(rs[1])].value << 16)
+                        + (0b000 << 20)
+                        + (u_bit << 23)
+                        + (1 << 24)
+                        + (0b010 << 25)
+                        + (CONDITION.AL.value << 28)
+                    )
                     pass
                 elif "[" in t[1] and "]" in t[1] and "!" in t[1]:
                     # STR{<c>}{<q>} <Rt>, [<Rn>, #{+/-}<imm>]! pre-indexed: P=1, W=1
                     ins.append(
-                        0b000000000100
-                        + (REGISTERS[t[1][1]].value << 12)
-                        + (REGISTERS[t[1][3]].value << 16)
+                        abs(int(imm))
+                        + (REGISTERS[str(rs[0])].value << 12)
+                        + (REGISTERS[str(rs[1])].value << 16)
                         + (0b010 << 20)
-                        + (0 << 23)
+                        + (u_bit << 23)
                         + (1 << 24)
                         + (0b010 << 25)
                         + (CONDITION.AL.value << 28)
@@ -129,6 +151,7 @@ def asm32(tokens):
             else:
                 raise RuntimeError(f"OPCODE '{t[1][0]}' not supported.")
 
+    # [print("{0:b}".format(i)) for i in ins]
     return ins
 
 
