@@ -7,10 +7,11 @@ sys.path.insert(0, os.path.abspath(Path(__file__).parent.parent))
 
 from arm_asm import asm32, parser
 
+TESTFS = ['testfs/arm32_subtract.s', 'testfs/arm32_prime.s']
 
 def test_arm_asm():
     ts, asmfs = [], []
-    for x in ['testfs/arm32_subtract.s', 'testfs/arm32_prime.s']:
+    for x in TESTFS:
         with open(x, "r") as f:
             asmfs.append(asm32(parser(f.read())))
 
@@ -23,5 +24,5 @@ def test_arm_asm():
             ts[i][j] = int(y, base=16)
 
     for i, (t, asm) in enumerate(zip(ts, asmfs)):
-        assert t == asm, f"test {i} failed."
+        assert t == asm, f"Test {i} for {TESTFS[i]} failed."
 

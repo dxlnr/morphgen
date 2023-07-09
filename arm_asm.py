@@ -131,7 +131,7 @@ def asm32(tokens) -> list[int]:
 
     ins = []
     for t in tokens:
-        print(t)
+        # print(t)
         if t[0] == Program.INSTRUCTION:
             inn = split_words(t[1].pop(0), conds)
             cond = (
@@ -144,6 +144,7 @@ def asm32(tokens) -> list[int]:
                 rd = REGISTERS[rs[0]].value
                 rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
                 s_bit = 0
+                op = 0 if len(rs) == 3 else 0b0010
                 imm = get_imm12(insb, rs, 3)
                 ins.append(
                     abs(int(imm))
@@ -151,13 +152,14 @@ def asm32(tokens) -> list[int]:
                     + (rn << 16)
                     + (s_bit << 20)
                     + (0b100 << 21)
-                    + (0b0010 << 24)
+                    + (op << 24)
                     + (cond << 28)
                 )
             elif insb[0] == OPCODE.SUB.value:
                 rd = REGISTERS[rs[0]].value
                 rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
                 s_bit = 0
+                op = 0 if len(rs) == 3 else 0b0010
                 imm = get_imm12(insb, rs, 3)
                 ins.append(
                     abs(int(imm))
@@ -165,7 +167,7 @@ def asm32(tokens) -> list[int]:
                     + (rn << 16)
                     + (s_bit << 20)
                     + (0b010 << 21)
-                    + (0b0010 << 24)
+                    + (op << 24)
                     + (cond << 28)
                 )
             elif insb[0] == OPCODE.STR.value:
@@ -245,6 +247,7 @@ def asm32(tokens) -> list[int]:
             else:
                 raise RuntimeError(f"OPCODE '{insb[0]}' not supported.")
 
+    # [print("{0:b}".format(i)) for i in ins]
     return ins
 
 
