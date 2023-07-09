@@ -70,10 +70,19 @@ class Program(Enum):
 def split_words(str_in: str, sl: list[str]) -> list[str]:
     """Reads in a string and splits it into words based on a list of symbols."""
     for w in sl:
-        m = list(filter(None, re.split(f'({str(re.escape(w))})', str_in)))
+        m = list(filter(None, re.split(f"({str(re.escape(w))})", str_in)))
         if len(m) > 1:
             return m
     return [str_in]
+
+
+def get_imm12(insb: list[str], rs: list[str], l: int) -> int:
+    """Returns the 12 bit immediate value."""
+    return (
+        REGISTERS[rs[l - 1]].value
+        if len(rs) == l
+        else list(filter(None, [re.findall(r"#(-?\d+)", s) for s in insb]))[0][0]
+    )
 
 
 def parser(opdc: str):
@@ -95,14 +104,13 @@ def parser(opdc: str):
             else:
                 ts.append((Program.INSTRUCTION, sl, pc))
                 pc += 4
-
     return ts
 
 
 def asm32(tokens):
     """ARM 32 bit assembler.
 
-    :param tokens: List of a tuple cotaining the type of the program and its symbols.
+    :param tokens: List of a tuple holding the type of the program and its symbols.
     :returns: A list of 32 bit machine code.
     :raises: RuntimeError if the instruction is not supported.
     """
@@ -113,17 +121,17 @@ def asm32(tokens):
         print(t)
         if t[0] == Program.INSTRUCTION:
             inn = split_words(t[1].pop(0), conds)
-            cond = CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
+            cond = (
+                CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
+            )
             insb = inn + t[1]
 
             rs = [s for s in insb if s in regs]
             if insb[0] == OPCODE.ADD.value:
-                rd = REGISTERS[str(rs[0])].value
-                rn = 1 if rs[1] == "pc" else REGISTERS[str(rs[1])].value
+                rd = REGISTERS[rs[0]].value
+                rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
                 s_bit = 0
-                imm = list(filter(None, [re.findall(r"#(-?\d+)", s) for s in insb]))[0][
-                    0
-                ]
+                imm = get_imm12(insb, rs, 3)
                 ins.append(
                     abs(int(imm))
                     + (rd << 12)
@@ -134,20 +142,23 @@ def asm32(tokens):
                     + (cond << 28)
                 )
             elif insb[0] == OPCODE.SUB.value:
+                rd = REGISTERS[rs[0]].value
+                rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
+                s_bit = 0
+                imm = get_imm12(insb, rs, 3)
+                ins.append(
+                    abs(int(imm))
+                    + (rd << 12)
+                    + (rn << 16)
+                    + (s_bit << 20)
+                    + (0b010 << 21)
+                    + (0b0010 << 24)
+                    + (cond << 28)
+                )
                 pass
             elif insb[0] == OPCODE.STR.value:
-                # 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 ... 0
-                # != 1111	   0  1	 0	P  U o2	 W o1 Rn          Rt          imm12
-                #
-                # STR{<c>}{<q>} <Rt>, [<Rn> {, #{+/-}<imm>}] immediate offset
-                # STR{<c>}{<q>} <Rt>, [<Rn>, #{+/-}<imm>]! pre-indexed
-                # STR{<c>}{<q>} <Rt>, [<Rn>], #{+/-}<imm> post-indexed
-                #
-                imm = list(filter(None, [re.findall(r"#(-?\d+)", s) for s in insb]))[0][
-                    0
-                ]
+                imm = get_imm12(insb, rs, 3)
                 u_bit = 0 if int(imm) < 0 else 1
-
                 if "[" in insb and "]" in insb and "!" not in insb:
                     o2wo1, p_bit = 0, 1
                 elif "[" in insb and "]" in insb and "!" in insb:
@@ -155,20 +166,31 @@ def asm32(tokens):
                 else:
                     o2wo1, p_bit = 2, 0
                 ins.append(
-                        abs(int(imm))
-                        + (REGISTERS[str(rs[0])].value << 12)
-                        + (REGISTERS[str(rs[1])].value << 16)
-                        + (o2wo1 << 20)
-                        + (u_bit << 23)
-                        + (p_bit << 24)
-                        + (0b010 << 25)
-                        + (cond << 28)
-                    )
+                    abs(int(imm))
+                    + (REGISTERS[rs[0]].value << 12)
+                    + (REGISTERS[rs[1]].value << 16)
+                    + (o2wo1 << 20)
+                    + (u_bit << 23)
+                    + (p_bit << 24)
+                    + (0b010 << 25)
+                    + (cond << 28)
+                )
 
             elif insb[0] == OPCODE.LDR.value:
                 pass
             elif insb[0] == OPCODE.MOV.value:
-                pass
+                s_bit = 0
+                imm = get_imm12(insb, rs, 2)
+                op = 0b00111 if len(rs) == 1 else 0b00011
+                ins.append(
+                    abs(int(imm))
+                    + (REGISTERS[rs[0]].value << 12)
+                    + (0 << 16)
+                    + (s_bit << 20)
+                    + (0b01 << 21)
+                    + (op << 23)
+                    + (cond << 28)
+                )
             elif insb[0] == OPCODE.BX.value:
                 pass
             else:
