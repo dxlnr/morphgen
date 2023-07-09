@@ -78,7 +78,7 @@ def fetch32(addr):
     addr -= 0x80000000
     if addr < 0 or addr >= len(memory):
         raise Exception("read out of memory: 0x%x" % addr)
-    return struct.unpack("I", memory[addr : addr + 4])[0]
+    return struct.unpack("I", memory[addr: addr + 4])[0]
 
 
 def imm_j(ins: int) -> int:
@@ -310,7 +310,7 @@ def step():
         elif func3 == 0b010:
             wmem(registers[rs1] + imm, struct.pack("I", registers[rs2]))
         else:
-            raise ValueError(f"STORE instruction failure.")
+            raise ValueError("STORE instruction failure.")
 
     elif opscode == OPCODE["LOAD"]:
         # lb (Load Byte)
@@ -329,7 +329,7 @@ def step():
         elif func3 == 0b101:
             registers[rd] = fetch32(registers[rs1] + imm) & bm(16)
         else:
-            raise ValueError(f"LOAD instruction failure.")
+            raise ValueError("LOAD instruction failure.")
     #
     # (5) Write Back
     #

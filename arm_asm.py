@@ -58,6 +58,11 @@ class OPCODE(Enum):
     LDR = "ldr"
     MOV = "mov"
     BX = "bx"
+    PUSH = "push"
+    CMP = "cmp"
+    B = "b"
+    BL = "bl"
+    POP = "pop"
 
 
 class Program(Enum):
@@ -76,11 +81,17 @@ def split_words(str_in: str, sl: list[str]) -> list[str]:
     return [str_in]
 
 
-def get_imm12(insb: list[str], rs: list[str], l: int) -> int:
-    """Returns the 12 bit immediate value."""
+def get_imm12(insb: list[str], rs: list[str], rsl: int) -> int:
+    """Returns the 12 bit immediate value.
+
+    :param insb: The instruction body: List of strings defining the instruction.
+    :param rs: List of strings defining the registers.
+    :param rsl: The excpected number of registers in that particular instruction.
+    :return: The 12 bit immediate value as integer.
+    """
     return (
-        REGISTERS[rs[l - 1]].value
-        if len(rs) == l
+        REGISTERS[rs[rsl - 1]].value
+        if len(rs) == rsl
         else list(filter(None, [re.findall(r"#(-?\d+)", s) for s in insb]))[0][0]
     )
 
@@ -93,7 +104,7 @@ def parser(opdc: str):
     """
     ts, pc = [], 0
     for line in opdc.split("\n"):
-        sl = list(filter(None, re.split(r"\t+|,| |\(|\)|(\[)|(\]+)", line)))
+        sl = list(filter(None, re.split(r"\t+|,| |\(|\)|(\[)|(\]+)|(\{)|(\}+)", line)))
         if sl:
             if re.match("\.+", sl[0]):
                 ts.append((Program.DIRECTIVE, sl))
@@ -107,7 +118,7 @@ def parser(opdc: str):
     return ts
 
 
-def asm32(tokens):
+def asm32(tokens) -> list[int]:
     """ARM 32 bit assembler.
 
     :param tokens: List of a tuple holding the type of the program and its symbols.
@@ -155,7 +166,6 @@ def asm32(tokens):
                     + (0b0010 << 24)
                     + (cond << 28)
                 )
-                pass
             elif insb[0] == OPCODE.STR.value:
                 imm = get_imm12(insb, rs, 3)
                 u_bit = 0 if int(imm) < 0 else 1
@@ -175,8 +185,25 @@ def asm32(tokens):
                     + (0b010 << 25)
                     + (cond << 28)
                 )
-
             elif insb[0] == OPCODE.LDR.value:
+                imm = get_imm12(insb, rs, 3)
+                u_bit = 0 if int(imm) < 0 else 1
+                if insb[-1] == "!":
+                    o2wo1, p_bit = 0b011, 1
+                else:
+                    o2wo1, p_bit = 0b001, 0
+                    if insb[-1] == "]":
+                        o2wo1, p_bit = 0b001, 1
+                ins.append(
+                    abs(int(imm))
+                    + (REGISTERS[rs[0]].value << 12)
+                    + (REGISTERS[rs[1]].value << 16)
+                    + (o2wo1 << 20)
+                    + (u_bit << 23)
+                    + (p_bit << 24)
+                    + (0b010 << 25)
+                    + (cond << 28)
+                )
                 pass
             elif insb[0] == OPCODE.MOV.value:
                 s_bit = 0
@@ -192,11 +219,30 @@ def asm32(tokens):
                     + (cond << 28)
                 )
             elif insb[0] == OPCODE.BX.value:
+                ins.append(
+                    REGISTERS[rs[0]].value
+                    + (0b0001 << 4)
+                    + (0b111111111111 << 8)
+                    + (0b00010010 << 20)
+                    + (cond << 28)
+                )
+            elif insb[0] == OPCODE.PUSH.value:
+                registers_list = 0
+                for i in reversed(REGISTERS.as_strs()):
+                    if i in rs:
+                        registers_list += 1 << REGISTERS[i].value
+                ins.append(registers_list + (0b100100101101 << 16) + (cond << 28))
+            elif insb[0] == OPCODE.CMP.value:
+                pass
+            elif insb[0] == OPCODE.B.value:
+                pass
+            elif insb[0] == OPCODE.BL.value:
+                pass
+            elif insb[0] == OPCODE.POP.value:
                 pass
             else:
                 raise RuntimeError(f"OPCODE '{insb[0]}' not supported.")
 
-    # [print("{0:b}".format(i)) for i in ins]
     return ins
 
 
@@ -212,3 +258,7 @@ if __name__ == "__main__":
         ins = asm32(ts)
 
         [print("%08x " % i) for i in ins]
+
+#         with open(f'{x.split(".")[0]}.bin', "w") as fp:
+#             for i in ins:
+#                 fp.write("%08x\n" % i)
