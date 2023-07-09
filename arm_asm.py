@@ -45,7 +45,10 @@ class CONDITION(Enum):
     GT = 0b1100  # Signed greater than
     LE = 0b1101  # Signed less than or equal
     AL = 0b1110  # Always (this is the default)
-    NV = 0b1111  # Never
+
+    @classmethod
+    def as_strs(cls):
+        return list(map(lambda c: c.name.lower(), cls))
 
 
 class OPCODE(Enum):
@@ -62,6 +65,15 @@ class Program(Enum):
     LABEL = 2
     INSTRUCTION = 3
     COMMENT = 4
+
+
+def split_words(str_in: str, sl: list[str]) -> list[str]:
+    """Reads in a string and splits it into words based on a list of symbols."""
+    for w in sl:
+        m = list(filter(None, re.split(f'({str(re.escape(w))})', str_in)))
+        if len(m) > 1:
+            return m
+    return [str_in]
 
 
 def parser(opdc: str):
@@ -88,68 +100,79 @@ def parser(opdc: str):
 
 
 def asm32(tokens):
-    """ARM 32 bit assambler.
+    """ARM 32 bit assembler.
 
     :param tokens: List of a tuple cotaining the type of the program and its symbols.
     :returns: A list of 32 bit machine code.
     :raises: RuntimeError if the instruction is not supported.
     """
-    reg_strs = frozenset(REGISTERS.as_strs())
+    regs, conds = frozenset(REGISTERS.as_strs()), frozenset(CONDITION.as_strs())
+
     ins = []
     for t in tokens:
         print(t)
         if t[0] == Program.INSTRUCTION:
-            if t[1][0] == OPCODE.ADD.value:
+            inn = split_words(t[1].pop(0), conds)
+            cond = CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
+            insb = inn + t[1]
+
+            rs = [s for s in insb if s in regs]
+            if insb[0] == OPCODE.ADD.value:
+                rd = REGISTERS[str(rs[0])].value
+                rn = 1 if rs[1] == "pc" else REGISTERS[str(rs[1])].value
+                s_bit = 0
+                imm = list(filter(None, [re.findall(r"#(-?\d+)", s) for s in insb]))[0][
+                    0
+                ]
+                ins.append(
+                    abs(int(imm))
+                    + (rd << 12)
+                    + (rn << 16)
+                    + (s_bit << 20)
+                    + (0b100 << 21)
+                    + (0b0010 << 24)
+                    + (cond << 28)
+                )
+            elif insb[0] == OPCODE.SUB.value:
                 pass
-            elif t[1][0] == OPCODE.SUB.value:
-                pass
-            elif t[1][0] == OPCODE.STR.value:
-                print(t[1])
+            elif insb[0] == OPCODE.STR.value:
                 # 31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 ... 0
-                # != 1111	   0  1	 0	P  U o2	 W o1 Rn	      Rt          imm12
-                imm = list(filter(None, [re.findall(r"#(-\d+)", s) for s in t[1]]))[0][
+                # != 1111	   0  1	 0	P  U o2	 W o1 Rn          Rt          imm12
+                #
+                # STR{<c>}{<q>} <Rt>, [<Rn> {, #{+/-}<imm>}] immediate offset
+                # STR{<c>}{<q>} <Rt>, [<Rn>, #{+/-}<imm>]! pre-indexed
+                # STR{<c>}{<q>} <Rt>, [<Rn>], #{+/-}<imm> post-indexed
+                #
+                imm = list(filter(None, [re.findall(r"#(-?\d+)", s) for s in insb]))[0][
                     0
                 ]
                 u_bit = 0 if int(imm) < 0 else 1
 
-                rs = [s for s in t[1] if s in reg_strs]
-                if "[" in t[1] and "]" in t[1] and "!" not in t[1]:
-                    # STR{<c>}{<q>} <Rt>, [<Rn> {, #{+/-}<imm>}] immediate offset: P=0, W=0
-                    ins.append(
-                        abs(int(imm))
-                        + (REGISTERS[str(rs[0])].value << 12)
-                        + (REGISTERS[str(rs[1])].value << 16)
-                        + (0b000 << 20)
-                        + (u_bit << 23)
-                        + (1 << 24)
-                        + (0b010 << 25)
-                        + (CONDITION.AL.value << 28)
-                    )
-                    pass
-                elif "[" in t[1] and "]" in t[1] and "!" in t[1]:
-                    # STR{<c>}{<q>} <Rt>, [<Rn>, #{+/-}<imm>]! pre-indexed: P=1, W=1
-                    ins.append(
-                        abs(int(imm))
-                        + (REGISTERS[str(rs[0])].value << 12)
-                        + (REGISTERS[str(rs[1])].value << 16)
-                        + (0b010 << 20)
-                        + (u_bit << 23)
-                        + (1 << 24)
-                        + (0b010 << 25)
-                        + (CONDITION.AL.value << 28)
-                    )
+                if "[" in insb and "]" in insb and "!" not in insb:
+                    o2wo1, p_bit = 0, 1
+                elif "[" in insb and "]" in insb and "!" in insb:
+                    o2wo1, p_bit = 2, 1
                 else:
-                    # STR{<c>}{<q>} <Rt>, [<Rn>], #{+/-}<imm> post-indexed: P=0, W=0
-                    pass
+                    o2wo1, p_bit = 2, 0
+                ins.append(
+                        abs(int(imm))
+                        + (REGISTERS[str(rs[0])].value << 12)
+                        + (REGISTERS[str(rs[1])].value << 16)
+                        + (o2wo1 << 20)
+                        + (u_bit << 23)
+                        + (p_bit << 24)
+                        + (0b010 << 25)
+                        + (cond << 28)
+                    )
 
-            elif t[1][0] == OPCODE.LDR.value:
+            elif insb[0] == OPCODE.LDR.value:
                 pass
-            elif t[1][0] == OPCODE.MOV.value:
+            elif insb[0] == OPCODE.MOV.value:
                 pass
-            elif t[1][0] == OPCODE.BX.value:
+            elif insb[0] == OPCODE.BX.value:
                 pass
             else:
-                raise RuntimeError(f"OPCODE '{t[1][0]}' not supported.")
+                raise RuntimeError(f"OPCODE '{insb[0]}' not supported.")
 
     # [print("{0:b}".format(i)) for i in ins]
     return ins

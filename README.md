@@ -23,7 +23,7 @@ python riscv_asm.py testfs/riscv_minimal.s
 
 ## ARM
 
-**Prequisits**: Cross-Compiler (if you are not on a ARM architecture anyway)
+**Prequisits**: Cross-Compiler (if you are not on a ARM architecture natively)
 ```bash
 sudo apt install gcc gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu make
 ```
@@ -33,7 +33,7 @@ sudo apt install gcc gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi gcc-aarch6
 python arm_asm.py testfs/subtract.s
 ```
 
-Run the bash script to investigate the desired out of the assembler.
+Run the bash script to investigate the desired output of the assembler.
 ```bash
 ./run_arm32_tests.sh
 ```
