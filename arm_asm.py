@@ -112,6 +112,8 @@ def parser(opdc: str):
                 ts.append((Program.LABEL, sl, pc))
             elif re.match("\@+", sl[0]):
                 ts.append((Program.COMMENT, sl))
+            elif re.match("\//+", sl[0]):
+                ts.append((Program.COMMENT, sl))
             else:
                 ts.append((Program.INSTRUCTION, sl, pc))
                 pc += 4

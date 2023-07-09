@@ -4,7 +4,8 @@ echo ".o : subtract.c"
 echo ""
 arm-linux-gnueabi-gcc -c -o subtract.o testfs/subtract.c
 arm-linux-gnueabi-objcopy -S -O binary subtract.o subtract.bin
-hexdump -e '"%08x " "\n"' subtract.bin
+hexdump -e '"%08x " "\n"' subtract.bin 
+# hexdump -e '"%08x " "\n"' subtract.bin > subtract.hex
 rm subtract.o subtract.bin
 
 echo ""
@@ -12,7 +13,8 @@ echo ".o : prime.c"
 echo ""
 arm-linux-gnueabi-gcc -c -o prime.o testfs/prime.c
 arm-linux-gnueabi-objcopy -S -O binary prime.o prime.bin
-hexdump -e '"%08x " "\n"' prime.bin
+hexdump -e '"%08x " "\n"' prime.bin 
+# hexdump -e '"%08x " "\n"' prime.bin > prime.hex
 rm prime.o prime.bin
 
 # To get the final executable, run the following commands:
