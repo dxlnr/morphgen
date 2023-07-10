@@ -24,5 +24,5 @@ def test_arm_asm():
             ts[i][j] = int(y, base=16)
 
     for i, (t, asm) in enumerate(zip(ts, asmfs)):
-        assert t == asm, f"Test {i} for {TESTFS[i]} failed."
-
+        for j, (y, x) in enumerate(zip(t, asm)):
+            assert y == x, f"Test {i} of {TESTFS[i]} failed for instruction {j}: target: {hex(t[j])} != actual: {hex(asm[j])}."

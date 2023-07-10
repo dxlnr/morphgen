@@ -17,6 +17,15 @@ hexdump -e '"%08x " "\n"' prime.bin
 # hexdump -e '"%08x " "\n"' prime.bin > prime.hex
 rm prime.o prime.bin
 
+echo ""
+echo ".o : fib.c"
+echo ""
+arm-linux-gnueabi-gcc -c -o fib.o testfs/fib.c
+arm-linux-gnueabi-objcopy -S -O binary fib.o fib.bin
+hexdump -e '"%08x " "\n"' fib.bin 
+hexdump -e '"%08x " "\n"' fib.bin > fib.hex
+rm fib.o fib.bin
+
 # To get the final executable, run the following commands:
 # You will find the instructions from above in it. The linker set its location.
 # echo ""
