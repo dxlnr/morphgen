@@ -72,6 +72,27 @@ class Program(Enum):
     COMMENT = 4
 
 
+def bm(bits: int = 32) -> int:
+    """Returns a bitmask based for the number of bits given."""
+    return 2**bits - 1
+
+
+def two_compl(val: int, bits: int = 32):
+    """Performs sign extension by number of bits given."""
+    if val < 0:
+        return bm(bits) & val
+    else:
+        return val
+
+
+def sign_ext(val: int, bits: int) -> int:
+    """Performs sign extension by number of bits given."""
+    if val >> (bits - 1) == 1:
+        return -((1 << bits) - val)
+    else:
+        return val
+
+
 def dump_to_hex(ins: list[int], fn: str) -> None:
     """Writes the output to hex file."""
     with open(f"{fn}", "w") as fp:
@@ -101,6 +122,11 @@ def get_imm12(insb: list[str], rs: list[str], rsl: int) -> int:
         if len(rs) == rsl
         else list(filter(None, [re.findall(r"#(-?\d+)", s) for s in insb]))[0][0]
     )
+
+
+def check_const(insb: list[str]) -> bool:
+    """Checks if the instruction contains a #<const>."""
+    return any(map(lambda x: x.startswith("#"), insb))
 
 
 def parser(opdc: str):
@@ -220,7 +246,7 @@ def asm32(tokens) -> list[int]:
             elif insb[0] == OPCODE.MOV.value:
                 s_bit = 0
                 imm = get_imm12(insb, rs, 2)
-                op = 0b00111 if len(rs) == 1 else 0b00011
+                op = 0b00111 if check_const(insb) else 0b00011
                 ins.append(
                     abs(int(imm))
                     + (REGISTERS[rs[0]].value << 12)
@@ -246,20 +272,26 @@ def asm32(tokens) -> list[int]:
                 ins.append(registers_list + (0b100100101101 << 16) + (cond << 28))
             elif insb[0] == OPCODE.CMP.value:
                 imm = get_imm12(insb, rs, 2)
+                op = 0b00110101 if check_const(insb) else 0b00010101
                 ins.append(
                     abs(int(imm))
                     + (0 << 12)
                     + (REGISTERS[rs[0]].value << 16)
-                    + (0b00110101 << 20)
+                    + (op << 20)
                     + (cond << 28)
                 )
             elif insb[0] == OPCODE.B.value:
                 label = list(filter(lambda x: x.startswith("."), insb))[0]
                 tl = next(x for x in labels if label == x[1][0].replace(":", ""))
-                offset = tl[2] - t[2] - 2
+                offset = two_compl(tl[2] - t[2] - 2, 24)
                 ins.append(offset + (0b1010 << 24) + (cond << 28))
             elif insb[0] == OPCODE.BL.value:
-                pass
+                label = insb[1]
+                try:
+                    tl = next(x for x in labels if label == x[1][0].replace(":", ""))
+                except StopIteration:
+                    offset = 16777214
+                ins.append(offset + (0b1011 << 24) + (cond << 28))
             elif insb[0] == OPCODE.POP.value:
                 pass
             else:

@@ -39,7 +39,7 @@ def registers_to_str(registers) -> str:
     for i, c in enumerate(registers):
         if i % 5 == 0 and i != 0:
             s += "\n"
-        s += f"\t%3s : %08x " % (ABI[i], c)
+        s += "\t%3s : %08x " % (ABI[i], c)
     return s
 
 
