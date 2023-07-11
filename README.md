@@ -16,7 +16,9 @@ python riscv_cpu.py
 
 ### Assembler 
 
-Run the Assembler via:
+**Disclaimer**: Unfinished
+
+Run the Assembler via: 
 ```bash 
 python riscv_asm.py testfs/riscv_minimal.s
 ``` 
@@ -31,6 +33,8 @@ sudo apt install gcc gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi gcc-aarch6
 ### ARM Assembler
 ```bash
 python arm_asm.py testfs/subtract.s
+# Run automatic tests with
+python -m unittest
 ```
 
 Run the bash script to investigate the desired output of the assembler.

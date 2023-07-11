@@ -72,6 +72,13 @@ class Program(Enum):
     COMMENT = 4
 
 
+def dump_to_hex(ins: list[int], fn: str) -> None:
+    """Writes the output to hex file."""
+    with open(f'{fn}', "w") as fp:
+        for i in ins:
+            fp.write("%08x\n" % i)
+
+
 def split_words(str_in: str, sl: list[str]) -> list[str]:
     """Reads in a string and splits it into words based on a list of symbols."""
     for w in sl:
@@ -130,8 +137,7 @@ def asm32(tokens) -> list[int]:
     regs, conds = frozenset(REGISTERS.as_strs()), frozenset(CONDITION.as_strs())
 
     ins = []
-    for t in tokens:
-        # print(t)
+    for idx, t in enumerate(tokens):
         if t[0] == Program.INSTRUCTION:
             inn = split_words(t[1].pop(0), conds)
             cond = (
@@ -208,7 +214,6 @@ def asm32(tokens) -> list[int]:
                     + (0b010 << 25)
                     + (cond << 28)
                 )
-                pass
             elif insb[0] == OPCODE.MOV.value:
                 s_bit = 0
                 imm = get_imm12(insb, rs, 2)
@@ -237,9 +242,27 @@ def asm32(tokens) -> list[int]:
                         registers_list += 1 << REGISTERS[i].value
                 ins.append(registers_list + (0b100100101101 << 16) + (cond << 28))
             elif insb[0] == OPCODE.CMP.value:
-                pass
+                imm = get_imm12(insb, rs, 2)
+                ins.append(
+                    abs(int(imm))
+                    + (0 << 12)
+                    + (REGISTERS[rs[0]].value << 16)
+                    + (0b00110101 << 20)
+                    + (cond << 28)
+                )
             elif insb[0] == OPCODE.B.value:
-                pass
+                label = filter(lambda x: x.startswith('.'), insb)
+                # print(label)
+                # import itertools
+                # it = itertools.takewhile(lambda x: x[1] != label, tokens[idx:])
+                # offset = sum(1 for _ in it)
+                # print(offset)
+
+                ins.append(
+                    offset
+                    + (0b1010 << 24)
+                    + (cond << 28)
+                )
             elif insb[0] == OPCODE.BL.value:
                 pass
             elif insb[0] == OPCODE.POP.value:
@@ -264,6 +287,4 @@ if __name__ == "__main__":
 
         [print("%08x " % i) for i in ins]
 
-#         with open(f'{x.split(".")[0]}.bin', "w") as fp:
-#             for i in ins:
-#                 fp.write("%08x\n" % i)
+
