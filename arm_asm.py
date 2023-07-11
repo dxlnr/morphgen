@@ -74,7 +74,7 @@ class Program(Enum):
 
 def dump_to_hex(ins: list[int], fn: str) -> None:
     """Writes the output to hex file."""
-    with open(f'{fn}', "w") as fp:
+    with open(f"{fn}", "w") as fp:
         for i in ins:
             fp.write("%08x\n" % i)
 
@@ -113,7 +113,9 @@ def parser(opdc: str):
     for line in opdc.split("\n"):
         sl = list(filter(None, re.split(r"\t+|,| |\(|\)|(\[)|(\]+)|(\{)|(\}+)", line)))
         if sl:
-            if re.match("\.+", sl[0]):
+            if re.match("\.(\w+):", sl[0]):
+                ts.append((Program.LABEL, sl, pc))
+            elif re.match("\.+", sl[0]):
                 ts.append((Program.DIRECTIVE, sl))
             elif re.match("\w+(?: \w+)*:", sl[0]):
                 ts.append((Program.LABEL, sl, pc))
@@ -123,7 +125,7 @@ def parser(opdc: str):
                 ts.append((Program.COMMENT, sl))
             else:
                 ts.append((Program.INSTRUCTION, sl, pc))
-                pc += 4
+                pc += 1
     return ts
 
 
@@ -135,6 +137,7 @@ def asm32(tokens) -> list[int]:
     :raises: RuntimeError if the instruction is not supported.
     """
     regs, conds = frozenset(REGISTERS.as_strs()), frozenset(CONDITION.as_strs())
+    labels = list(filter(lambda c: c[0] == Program.LABEL, tokens))
 
     ins = []
     for idx, t in enumerate(tokens):
@@ -251,18 +254,10 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif insb[0] == OPCODE.B.value:
-                label = filter(lambda x: x.startswith('.'), insb)
-                # print(label)
-                # import itertools
-                # it = itertools.takewhile(lambda x: x[1] != label, tokens[idx:])
-                # offset = sum(1 for _ in it)
-                # print(offset)
-
-                ins.append(
-                    offset
-                    + (0b1010 << 24)
-                    + (cond << 28)
-                )
+                label = list(filter(lambda x: x.startswith("."), insb))[0]
+                tl = next(x for x in labels if label == x[1][0].replace(":", ""))
+                offset = tl[2] - t[2] - 2
+                ins.append(offset + (0b1010 << 24) + (cond << 28))
             elif insb[0] == OPCODE.BL.value:
                 pass
             elif insb[0] == OPCODE.POP.value:
@@ -286,5 +281,3 @@ if __name__ == "__main__":
         ins = asm32(ts)
 
         [print("%08x " % i) for i in ins]
-
-
