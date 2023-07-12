@@ -52,17 +52,35 @@ class CONDITION(Enum):
 
 
 class OPCODE(Enum):
-    ADD = "add"
-    STR = "str"
-    SUB = "sub"
-    LDR = "ldr"
-    MOV = "mov"
-    BX = "bx"
-    PUSH = "push"
-    CMP = "cmp"
-    B = "b"
-    BL = "bl"
-    POP = "pop"
+    """ARM 32 bit opcodes."""
+    # ALU
+    ADD = "add"  # Addition
+    SUB = "sub"  # Subtraction
+    MUL = "mul"  # Multiplication
+    # Load & Store
+    STR = "str"  # Store
+    STM = "stm"  # Store Multiple
+    LDR = "ldr"  # Load
+    LDM = "ldm"  # Load Multiple
+    MOV = "mov"  # Move data
+    MVN = "mvn"  # Move data and negate
+    POP = "pop"  # Pop off Stack
+    PUSH = "push"  # Push on Stack
+    # Branching
+    B = "b"  # Branch
+    BL = "bl"  # Branch with Link
+    BX = "bx"  # Branch and eXchange
+    CMP = "cmp"  # Compare
+    # Extra
+    EOR = "eor"  # Bitwise XOR
+    LSL = "lsl"  # Logical Shift Left
+    LSR = "lsr"  # Logical Shift Right
+    ASR = "asr"  # Arithmetic Shift Right
+    ROR = "ror"  # Rotate Right
+    AND = "and"  # Bitwise AND
+    ORR = "orr"  # Bitwise OR
+    SWI = "swi"  # System Call
+    SVC = "svc"  # System Call
 
 
 class Program(Enum):
@@ -81,14 +99,6 @@ def two_compl(val: int, bits: int = 32):
     """Performs sign extension by number of bits given."""
     if val < 0:
         return bm(bits) & val
-    else:
-        return val
-
-
-def sign_ext(val: int, bits: int) -> int:
-    """Performs sign extension by number of bits given."""
-    if val >> (bits - 1) == 1:
-        return -((1 << bits) - val)
     else:
         return val
 
@@ -126,7 +136,12 @@ def get_imm12(insb: list[str], rs: list[str], rsl: int) -> int:
 
 def check_const(insb: list[str]) -> bool:
     """Checks if the instruction contains a #<const>."""
-    return any(map(lambda x: x.startswith("#"), insb))
+    return any(filter(lambda x: x.startswith("#"), insb))
+
+
+def check_label(insb: list[str]) -> bool:
+    """Checks if the instruction contains a <label>."""
+    return list(filter(lambda x: x.startswith(".") | x.startswith("_"), insb))
 
 
 def parser(opdc: str):
@@ -167,14 +182,20 @@ def asm32(tokens) -> list[int]:
 
     ins = []
     for idx, t in enumerate(tokens):
+        print(t)
         if t[0] == Program.INSTRUCTION:
             inn = split_words(t[1].pop(0), conds)
             cond = (
                 CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
             )
             insb = inn + t[1]
-
             rs = [s for s in insb if s in regs]
+            # if label := check_label(insb):
+            #     tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
+            #     offset = two_compl(tl[2] - t[2] - 2, 24)
+            # else:
+            #     offset = 16777214
+
             if insb[0] == OPCODE.ADD.value:
                 rd = REGISTERS[rs[0]].value
                 rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
@@ -207,6 +228,7 @@ def asm32(tokens) -> list[int]:
                 )
             elif insb[0] == OPCODE.STR.value:
                 imm = get_imm12(insb, rs, 3)
+                print(imm)
                 u_bit = 0 if int(imm) < 0 else 1
                 if "[" in insb and "]" in insb and "!" not in insb:
                     o2wo1, p_bit = 0, 1
@@ -225,7 +247,14 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif insb[0] == OPCODE.LDR.value:
-                imm = get_imm12(insb, rs, 3)
+                print(rs)
+                if label := check_label(insb):
+                    tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
+                    imm = two_compl(tl[2] - t[2] - 2, 24)
+                    rn = 1
+                else:
+                    imm = get_imm12(insb, rs, 3)
+                    rn = REGISTERS[rs[1]].value
                 u_bit = 0 if int(imm) < 0 else 1
                 if insb[-1] == "!":
                     o2wo1, p_bit = 0b011, 1
@@ -236,7 +265,7 @@ def asm32(tokens) -> list[int]:
                 ins.append(
                     abs(int(imm))
                     + (REGISTERS[rs[0]].value << 12)
-                    + (REGISTERS[rs[1]].value << 16)
+                    + (rn << 16)
                     + (o2wo1 << 20)
                     + (u_bit << 23)
                     + (p_bit << 24)
@@ -282,7 +311,10 @@ def asm32(tokens) -> list[int]:
                 )
             elif insb[0] == OPCODE.B.value:
                 label = list(filter(lambda x: x.startswith("."), insb))[0]
-                tl = next(x for x in labels if label == x[1][0].replace(":", ""))
+                try:
+                    tl = next(x for x in labels if label == x[1][0].replace(":", ""))
+                except StopIteration:
+                    offset = 16777214
                 offset = two_compl(tl[2] - t[2] - 2, 24)
                 ins.append(offset + (0b1010 << 24) + (cond << 28))
             elif insb[0] == OPCODE.BL.value:
@@ -296,6 +328,8 @@ def asm32(tokens) -> list[int]:
                 pass
             else:
                 raise RuntimeError(f"OPCODE '{insb[0]}' not supported.")
+
+            print(bin(ins[-1]))
 
     # [print("{0:b}".format(i)) for i in ins]
     return ins
@@ -312,4 +346,4 @@ if __name__ == "__main__":
         ts = parser(f.read())
         ins = asm32(ts)
 
-        [print("%08x " % i) for i in ins]
+        [print(f"{idx + 1} %08x " % i) for (idx, i) in enumerate(ins)]
