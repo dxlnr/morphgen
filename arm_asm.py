@@ -53,6 +53,7 @@ class CONDITION(Enum):
 
 class OPCODE(Enum):
     """ARM 32 bit opcodes."""
+
     # ALU
     ADD = "add"  # Addition
     SUB = "sub"  # Subtraction
@@ -90,15 +91,15 @@ class Program(Enum):
     COMMENT = 4
 
 
-def bm(bits: int = 32) -> int:
-    """Returns a bitmask based for the number of bits given."""
-    return 2**bits - 1
+def bm(b: int = 32):
+    """Performs sign extension by number of bits given."""
+    return 2**b - 1
 
 
-def two_compl(val: int, bits: int = 32):
+def sext(val: int, bits: int = 32):
     """Performs sign extension by number of bits given."""
     if val < 0:
-        return bm(bits) & val
+        return (2**bits - 1) & val
     else:
         return val
 
@@ -136,12 +137,17 @@ def get_imm12(insb: list[str], rs: list[str], rsl: int) -> int:
 
 def check_const(insb: list[str]) -> bool:
     """Checks if the instruction contains a #<const>."""
-    return any(filter(lambda x: x.startswith("#"), insb))
+    return list(filter(lambda x: x.startswith("#"), insb))
 
 
 def check_label(insb: list[str]) -> bool:
     """Checks if the instruction contains a <label>."""
     return list(filter(lambda x: x.startswith(".") | x.startswith("_"), insb))
+
+
+def check_pc(insb: list[str]) -> bool:
+    """Checks if the instruction contains a <label>."""
+    return list(filter(lambda x: x == "pc", insb))
 
 
 def parser(opdc: str):
@@ -182,21 +188,23 @@ def asm32(tokens) -> list[int]:
 
     ins = []
     for idx, t in enumerate(tokens):
-        print(t)
+        # print(t)
         if t[0] == Program.INSTRUCTION:
             inn = split_words(t[1].pop(0), conds)
             cond = (
                 CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
             )
-            insb = inn + t[1]
-            rs = [s for s in insb if s in regs]
-            # if label := check_label(insb):
-            #     tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
-            #     offset = two_compl(tl[2] - t[2] - 2, 24)
-            # else:
-            #     offset = 16777214
+            insb = t[1]
+            if wf := any(filter(lambda x: x not in ['[', ']', '{', '}'], insb)):
+                insb = list(filter(lambda x: x not in ['[', ']', '{', '}'], insb))
+            if ef := any(filter(lambda x: x[-1] == '!', insb)):
+                insb = list(filter(lambda x: x not in ['[', ']', '{', '}'], insb))
+            if rs := [s for s in insb if s in regs]:
+                insb = list(filter(lambda x: x in rs, insb))
+            const = insb[-1] if insb[-1].startswith('#') else None
+            label = insb[-1] if not insb[-1].startswith('#') else None
 
-            if insb[0] == OPCODE.ADD.value:
+            if inn[0] == OPCODE.ADD.value:
                 rd = REGISTERS[rs[0]].value
                 rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
                 s_bit = 0
@@ -211,7 +219,7 @@ def asm32(tokens) -> list[int]:
                     + (op << 24)
                     + (cond << 28)
                 )
-            elif insb[0] == OPCODE.SUB.value:
+            elif inn[0] == OPCODE.SUB.value:
                 rd = REGISTERS[rs[0]].value
                 rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
                 s_bit = 0
@@ -226,9 +234,8 @@ def asm32(tokens) -> list[int]:
                     + (op << 24)
                     + (cond << 28)
                 )
-            elif insb[0] == OPCODE.STR.value:
+            elif inn[0] == OPCODE.STR.value:
                 imm = get_imm12(insb, rs, 3)
-                print(imm)
                 u_bit = 0 if int(imm) < 0 else 1
                 if "[" in insb and "]" in insb and "!" not in insb:
                     o2wo1, p_bit = 0, 1
@@ -246,11 +253,11 @@ def asm32(tokens) -> list[int]:
                     + (0b010 << 25)
                     + (cond << 28)
                 )
-            elif insb[0] == OPCODE.LDR.value:
+            elif inn[0] == OPCODE.LDR.value:
                 print(rs)
                 if label := check_label(insb):
                     tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
-                    imm = two_compl(tl[2] - t[2] - 2, 24)
+                    imm = sext(tl[2] - t[2] - 2, 24)
                     rn = 1
                 else:
                     imm = get_imm12(insb, rs, 3)
@@ -272,7 +279,7 @@ def asm32(tokens) -> list[int]:
                     + (0b010 << 25)
                     + (cond << 28)
                 )
-            elif insb[0] == OPCODE.MOV.value:
+            elif inn[0] == OPCODE.MOV.value:
                 s_bit = 0
                 imm = get_imm12(insb, rs, 2)
                 op = 0b00111 if check_const(insb) else 0b00011
@@ -285,7 +292,7 @@ def asm32(tokens) -> list[int]:
                     + (op << 23)
                     + (cond << 28)
                 )
-            elif insb[0] == OPCODE.BX.value:
+            elif inn[0] == OPCODE.BX.value:
                 ins.append(
                     REGISTERS[rs[0]].value
                     + (0b0001 << 4)
@@ -293,13 +300,13 @@ def asm32(tokens) -> list[int]:
                     + (0b00010010 << 20)
                     + (cond << 28)
                 )
-            elif insb[0] == OPCODE.PUSH.value:
+            elif inn[0] == OPCODE.PUSH.value:
                 registers_list = 0
                 for i in reversed(REGISTERS.as_strs()):
                     if i in rs:
                         registers_list += 1 << REGISTERS[i].value
                 ins.append(registers_list + (0b100100101101 << 16) + (cond << 28))
-            elif insb[0] == OPCODE.CMP.value:
+            elif inn[0] == OPCODE.CMP.value:
                 imm = get_imm12(insb, rs, 2)
                 op = 0b00110101 if check_const(insb) else 0b00010101
                 ins.append(
@@ -309,29 +316,44 @@ def asm32(tokens) -> list[int]:
                     + (op << 20)
                     + (cond << 28)
                 )
-            elif insb[0] == OPCODE.B.value:
-                label = list(filter(lambda x: x.startswith("."), insb))[0]
-                try:
-                    tl = next(x for x in labels if label == x[1][0].replace(":", ""))
-                except StopIteration:
-                    offset = 16777214
-                offset = two_compl(tl[2] - t[2] - 2, 24)
-                ins.append(offset + (0b1010 << 24) + (cond << 28))
-            elif insb[0] == OPCODE.BL.value:
-                label = insb[1]
-                try:
-                    tl = next(x for x in labels if label == x[1][0].replace(":", ""))
-                except StopIteration:
-                    offset = 16777214
-                ins.append(offset + (0b1011 << 24) + (cond << 28))
-            elif insb[0] == OPCODE.POP.value:
+            elif inn[0] == OPCODE.B.value:
+                ins.append(off + (0b1010 << 24) + (cond << 28))
+            elif inn[0] == OPCODE.BL.value:
+                ins.append(off + (0b1011 << 24) + (cond << 28))
+            elif inn[0] == OPCODE.BX.value:
+                ins.append(rm + (1 << 4) + (bm(1) << 8) + (18 << 20) + (cond << 28))
+            elif inn[0] == OPCODE.POP.value:
+                pass
+            elif inn[0] == OPCODE.MUL.value:
+                pass
+            elif inn[0] == OPCODE.STM.value:
+                pass
+            elif inn[0] == OPCODE.LDM.value:
+                pass
+            elif inn[0] == OPCODE.MVN.value:
+                pass
+            elif inn[0] == OPCODE.EOR.value:
+                pass
+            elif inn[0] == OPCODE.LSL.value:
+                pass
+            elif inn[0] == OPCODE.LSR.value:
+                pass
+            elif inn[0] == OPCODE.ASR.value:
+                pass
+            elif inn[0] == OPCODE.AND.value:
+                pass
+            elif inn[0] == OPCODE.ORR.value:
+                pass
+            elif inn[0] == OPCODE.SWI.value:
+                pass
+            elif inn[0] == OPCODE.SWC.value:
                 pass
             else:
-                raise RuntimeError(f"OPCODE '{insb[0]}' not supported.")
+                raise RuntimeError(f"OPCODE '{inn[0]}' not supported.")
 
             print(bin(ins[-1]))
 
-    # [print("{0:b}".format(i)) for i in ins]
+    [print("{0:b}".format(i)) for i in ins]
     return ins
 
 
