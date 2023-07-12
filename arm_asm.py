@@ -120,21 +120,6 @@ def split_words(str_in: str, sl: list[str]) -> list[str]:
     return [str_in]
 
 
-def get_imm12(insb: list[str], rs: list[str], rsl: int) -> int:
-    """Returns the 12 bit immediate value.
-
-    :param insb: The instruction body: List of strings defining the instruction.
-    :param rs: List of strings defining the registers.
-    :param rsl: The excpected number of registers in that particular instruction.
-    :return: The 12 bit immediate value as integer.
-    """
-    return (
-        REGISTERS[rs[rsl - 1]].value
-        if len(rs) == rsl
-        else list(filter(None, [re.findall(r"#(-?\d+)", s) for s in insb]))[0][0]
-    )
-
-
 def check_const(insb: list[str]) -> bool:
     """Checks if the instruction contains a #<const>."""
     return list(filter(lambda x: x.startswith("#"), insb))
@@ -142,7 +127,7 @@ def check_const(insb: list[str]) -> bool:
 
 def check_label(insb: list[str]) -> bool:
     """Checks if the instruction contains a <label>."""
-    return list(filter(lambda x: x.startswith(".") | x.startswith("_"), insb))
+    return list(filter(lambda x: x.startswith("."), insb))
 
 
 def check_pc(insb: list[str]) -> bool:
@@ -151,7 +136,7 @@ def check_pc(insb: list[str]) -> bool:
 
 
 def parser(opdc: str):
-    """Reads the assmbly code and returns list of tokenized symbols.
+    """Reads the assmebly code and returns list of tokenized symbols.
 
     :param opdc: The assembly code to be parsed in string format.
     :return: A list of tuples containing the type of the program and its symbols.
@@ -188,31 +173,43 @@ def asm32(tokens) -> list[int]:
 
     ins = []
     for idx, t in enumerate(tokens):
-        # print(t)
+        print(t)
         if t[0] == Program.INSTRUCTION:
             inn = split_words(t[1].pop(0), conds)
             cond = (
                 CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
             )
             insb = t[1]
-            if wf := any(filter(lambda x: x not in ['[', ']', '{', '}'], insb)):
-                insb = list(filter(lambda x: x not in ['[', ']', '{', '}'], insb))
-            if ef := any(filter(lambda x: x[-1] == '!', insb)):
-                insb = list(filter(lambda x: x not in ['[', ']', '{', '}'], insb))
+            if wf := any(filter(lambda x: x not in ["[", "]", "{", "}"], insb)):
+                insb = list(filter(lambda x: x not in ["[", "]", "{", "}"], insb))
+            if ef := any(filter(lambda x: x[-1] == "!", insb)):
+                insb = list(filter(lambda x: x not in ["[", "]", "{", "}"], insb))
             if rs := [s for s in insb if s in regs]:
-                insb = list(filter(lambda x: x in rs, insb))
-            const = insb[-1] if insb[-1].startswith('#') else None
-            label = insb[-1] if not insb[-1].startswith('#') else None
+                insb = list(filter(lambda x: x not in rs, insb))
+            if len(insb) > 0:
+                if const := list(
+                    filter(None, [re.findall(r"#(-?\d+)", s) for s in insb])
+                ):
+                    insb = list(filter(lambda x: not x.startswith("#"), insb))
+                    const = const[0][0]
+
+                # TODO: Distinguish between <shift> and <label>
+                label = insb[0] if len(insb) else None
 
             if inn[0] == OPCODE.ADD.value:
-                rd = REGISTERS[rs[0]].value
-                rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
-                s_bit = 0
-                op = 0 if len(rs) == 3 else 0b0010
-                imm = get_imm12(insb, rs, 3)
+                s_bit, op = 0, 0
+                rn = 0xF if rs[1] == "pc" else REGISTERS[rs[1]].value
+                if len(rs) == 2:
+                    imm = abs(int(const))
+                elif len(rs) == 3:
+                    imm = REGISTERS[rs[2]].value
+                elif len(rs) == 4:
+                    pass
+                else:
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
                 ins.append(
-                    abs(int(imm))
-                    + (rd << 12)
+                    imm
+                    + (REGISTERS[rs[0]].value << 12)
                     + (rn << 16)
                     + (s_bit << 20)
                     + (0b100 << 21)
@@ -220,14 +217,20 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.SUB.value:
-                rd = REGISTERS[rs[0]].value
-                rn = 1 if rs[1] == "pc" else REGISTERS[rs[1]].value
-                s_bit = 0
-                op = 0 if len(rs) == 3 else 0b0010
-                imm = get_imm12(insb, rs, 3)
+                if len(rs) == 2:
+                    s_bit, op = 0, 2
+                    rn = 0xF if rs[1] == "pc" else REGISTERS[rs[1]].value
+                    imm12 = abs(int(const))
+                elif len(rs) == 3:
+                    s_bit, op = 0, 0
+                    imm12 = REGISTERS[rs[2]].value
+                elif len(rs) == 4:
+                    pass
+                else:
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
                 ins.append(
-                    abs(int(imm))
-                    + (rd << 12)
+                    imm12
+                    + (REGISTERS[rs[0]].value << 12)
                     + (rn << 16)
                     + (s_bit << 20)
                     + (0b010 << 21)
@@ -235,42 +238,50 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.STR.value:
-                imm = get_imm12(insb, rs, 3)
-                u_bit = 0 if int(imm) < 0 else 1
-                if "[" in insb and "]" in insb and "!" not in insb:
-                    o2wo1, p_bit = 0, 1
-                elif "[" in insb and "]" in insb and "!" in insb:
-                    o2wo1, p_bit = 2, 1
+                if len(rs) == 2:
+                    u_bit = 0 if int(const) < 0 else 1
+                    if not wf:
+                        o2wo1, p_bit = 2, 0
+                    elif wf and ef:
+                        o2wo1, p_bit = 2, 1
+                    else:
+                        o2wo1, p_bit = 0, 1
+                    ins.append(
+                        abs(int(const))
+                        + (REGISTERS[rs[0]].value << 12)
+                        + (REGISTERS[rs[1]].value << 16)
+                        + (o2wo1 << 20)
+                        + (u_bit << 23)
+                        + (p_bit << 24)
+                        + (0b010 << 25)
+                        + (cond << 28)
+                    )
+                elif len(rs) == 3:
+                    pass
                 else:
-                    o2wo1, p_bit = 2, 0
-                ins.append(
-                    abs(int(imm))
-                    + (REGISTERS[rs[0]].value << 12)
-                    + (REGISTERS[rs[1]].value << 16)
-                    + (o2wo1 << 20)
-                    + (u_bit << 23)
-                    + (p_bit << 24)
-                    + (0b010 << 25)
-                    + (cond << 28)
-                )
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
+
             elif inn[0] == OPCODE.LDR.value:
-                print(rs)
-                if label := check_label(insb):
+                if len(rs) == 1:
                     tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
                     imm = sext(tl[2] - t[2] - 2, 24)
-                    rn = 1
-                else:
-                    imm = get_imm12(insb, rs, 3)
+                    rn = 0xF
+                if len(rs) == 2:
+                    u_bit = 0 if int(const) < 0 else 1
                     rn = REGISTERS[rs[1]].value
-                u_bit = 0 if int(imm) < 0 else 1
-                if insb[-1] == "!":
-                    o2wo1, p_bit = 0b011, 1
+                    imm = abs(int(const))
+                    if not wf:
+                        o2wo1, p_bit = 3, 1
+                    elif wf and ef:
+                        o2wo1, p_bit = 1, 1
+                    else:
+                        o2wo1, p_bit = 1, 0
+                elif len(rs) == 3:
+                    pass
                 else:
-                    o2wo1, p_bit = 0b001, 0
-                    if insb[-1] == "]":
-                        o2wo1, p_bit = 0b001, 1
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
                 ins.append(
-                    abs(int(imm))
+                    imm
                     + (REGISTERS[rs[0]].value << 12)
                     + (rn << 16)
                     + (o2wo1 << 20)
@@ -281,23 +292,22 @@ def asm32(tokens) -> list[int]:
                 )
             elif inn[0] == OPCODE.MOV.value:
                 s_bit = 0
-                imm = get_imm12(insb, rs, 2)
-                op = 0b00111 if check_const(insb) else 0b00011
+                if len(rs) == 1:
+                    imm = abs(int(const))
+                    op = 7
+                elif len(rs) == 2:
+                    op = 3
+                elif len(rs) == 3:
+                    pass
+                else:
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
                 ins.append(
-                    abs(int(imm))
+                    imm
                     + (REGISTERS[rs[0]].value << 12)
                     + (0 << 16)
                     + (s_bit << 20)
-                    + (0b01 << 21)
+                    + (1 << 21)
                     + (op << 23)
-                    + (cond << 28)
-                )
-            elif inn[0] == OPCODE.BX.value:
-                ins.append(
-                    REGISTERS[rs[0]].value
-                    + (0b0001 << 4)
-                    + (0b111111111111 << 8)
-                    + (0b00010010 << 20)
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.PUSH.value:
@@ -305,53 +315,74 @@ def asm32(tokens) -> list[int]:
                 for i in reversed(REGISTERS.as_strs()):
                     if i in rs:
                         registers_list += 1 << REGISTERS[i].value
-                ins.append(registers_list + (0b100100101101 << 16) + (cond << 28))
+                ins.append(registers_list + (0x92D << 16) + (cond << 28))
             elif inn[0] == OPCODE.CMP.value:
-                imm = get_imm12(insb, rs, 2)
-                op = 0b00110101 if check_const(insb) else 0b00010101
+                if len(rs) == 1:
+                    imm = abs(int(const))
+                    op = 0x35
+                elif len(rs) == 2:
+                    op = 0x15
+                elif len(rs) == 3:
+                    op = 0x15
+                else:
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
                 ins.append(
-                    abs(int(imm))
+                    imm
                     + (0 << 12)
                     + (REGISTERS[rs[0]].value << 16)
                     + (op << 20)
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.B.value:
-                ins.append(off + (0b1010 << 24) + (cond << 28))
+                if label := check_label(insb):
+                    tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
+                    off = sext(tl[2] - t[2] - 2, 24)
+                else:
+                    off = 0xFFFFFE
+                ins.append(off + (0xA << 24) + (cond << 28))
             elif inn[0] == OPCODE.BL.value:
-                ins.append(off + (0b1011 << 24) + (cond << 28))
+                if label := check_label(insb):
+                    tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
+                    off = sext(tl[2] - t[2] - 2, 24)
+                else:
+                    off = 0xFFFFFE
+                ins.append(off + (0xB << 24) + (cond << 28))
             elif inn[0] == OPCODE.BX.value:
-                ins.append(rm + (1 << 4) + (bm(1) << 8) + (18 << 20) + (cond << 28))
-            elif inn[0] == OPCODE.POP.value:
-                pass
-            elif inn[0] == OPCODE.MUL.value:
-                pass
-            elif inn[0] == OPCODE.STM.value:
-                pass
-            elif inn[0] == OPCODE.LDM.value:
-                pass
-            elif inn[0] == OPCODE.MVN.value:
-                pass
-            elif inn[0] == OPCODE.EOR.value:
-                pass
-            elif inn[0] == OPCODE.LSL.value:
-                pass
-            elif inn[0] == OPCODE.LSR.value:
-                pass
-            elif inn[0] == OPCODE.ASR.value:
-                pass
-            elif inn[0] == OPCODE.AND.value:
-                pass
-            elif inn[0] == OPCODE.ORR.value:
-                pass
-            elif inn[0] == OPCODE.SWI.value:
-                pass
-            elif inn[0] == OPCODE.SWC.value:
-                pass
+                ins.append(
+                    REGISTERS[rs[0]].value
+                    + (1 << 4)
+                    + (bm(1) << 8)
+                    + (18 << 20)
+                    + (cond << 28)
+                )
+            #             elif inn[0] == OPCODE.POP.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.MUL.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.STM.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.LDM.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.MVN.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.EOR.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.LSL.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.LSR.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.ASR.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.AND.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.ORR.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.SWI.value:
+            #                 pass
+            #             elif inn[0] == OPCODE.SWC.value:
+            #                 pass
             else:
                 raise RuntimeError(f"OPCODE '{inn[0]}' not supported.")
-
-            print(bin(ins[-1]))
 
     [print("{0:b}".format(i)) for i in ins]
     return ins
