@@ -180,8 +180,12 @@ def asm32(tokens) -> list[int]:
                 CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
             )
             insb = t[1]
-            if wf := any(filter(lambda x: x not in ["[", "]", "{", "}"], insb)):
-                insb = list(filter(lambda x: x not in ["[", "]", "{", "}"], insb))
+            if wf := any(filter(lambda x: x in ["[", "]"], insb)):
+                if insb.index(']') - insb.index('[') <= 2:
+                    wf = False
+                insb = list(filter(lambda x: x not in ["[", "]"], insb))
+            if bbwf := any(filter(lambda x: x in ["{", "}"], insb)):
+                insb = list(filter(lambda x: x not in ["{", "}"], insb))
             if ef := any(filter(lambda x: x[-1] == "!", insb)):
                 insb = list(filter(lambda x: x not in ["[", "]", "{", "}"], insb))
             if rs := [s for s in insb if s in regs]:
@@ -197,11 +201,12 @@ def asm32(tokens) -> list[int]:
                 label = insb[0] if len(insb) else None
 
             if inn[0] == OPCODE.ADD.value:
-                s_bit, op = 0, 0
                 rn = 0xF if rs[1] == "pc" else REGISTERS[rs[1]].value
                 if len(rs) == 2:
+                    s_bit, op = 0, 2
                     imm = abs(int(const))
                 elif len(rs) == 3:
+                    s_bit, op = 0, 0
                     imm = REGISTERS[rs[2]].value
                 elif len(rs) == 4:
                     pass
@@ -217,9 +222,9 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.SUB.value:
+                rn = 0xF if rs[1] == "pc" else REGISTERS[rs[1]].value
                 if len(rs) == 2:
                     s_bit, op = 0, 2
-                    rn = 0xF if rs[1] == "pc" else REGISTERS[rs[1]].value
                     imm12 = abs(int(const))
                 elif len(rs) == 3:
                     s_bit, op = 0, 0
@@ -263,19 +268,20 @@ def asm32(tokens) -> list[int]:
 
             elif inn[0] == OPCODE.LDR.value:
                 if len(rs) == 1:
-                    tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
+                    tl = next(x for x in labels if label == x[1][0].replace(":", ""))
                     imm = sext(tl[2] - t[2] - 2, 24)
                     rn = 0xF
-                if len(rs) == 2:
+                elif len(rs) == 2:
                     u_bit = 0 if int(const) < 0 else 1
                     rn = REGISTERS[rs[1]].value
                     imm = abs(int(const))
+                    print(wf, ef)
                     if not wf:
-                        o2wo1, p_bit = 3, 1
-                    elif wf and ef:
-                        o2wo1, p_bit = 1, 1
-                    else:
                         o2wo1, p_bit = 1, 0
+                    elif wf and ef:
+                        o2wo1, p_bit = 3, 1
+                    else:
+                        o2wo1, p_bit = 1, 1
                 elif len(rs) == 3:
                     pass
                 else:
@@ -297,6 +303,7 @@ def asm32(tokens) -> list[int]:
                     op = 7
                 elif len(rs) == 2:
                     op = 3
+                    imm = REGISTERS[rs[1]].value
                 elif len(rs) == 3:
                     pass
                 else:
@@ -310,12 +317,19 @@ def asm32(tokens) -> list[int]:
                     + (op << 23)
                     + (cond << 28)
                 )
+                print(hex(ins[-1]))
             elif inn[0] == OPCODE.PUSH.value:
                 registers_list = 0
                 for i in reversed(REGISTERS.as_strs()):
                     if i in rs:
                         registers_list += 1 << REGISTERS[i].value
                 ins.append(registers_list + (0x92D << 16) + (cond << 28))
+            elif inn[0] == OPCODE.POP.value:
+                registers_list = 0
+                for i in reversed(REGISTERS.as_strs()):
+                    if i in rs:
+                        registers_list += 1 << REGISTERS[i].value
+                ins.append(registers_list + (0x8BD << 16) + (cond << 28))
             elif inn[0] == OPCODE.CMP.value:
                 if len(rs) == 1:
                     imm = abs(int(const))
@@ -355,8 +369,6 @@ def asm32(tokens) -> list[int]:
                     + (18 << 20)
                     + (cond << 28)
                 )
-            #             elif inn[0] == OPCODE.POP.value:
-            #                 pass
             #             elif inn[0] == OPCODE.MUL.value:
             #                 pass
             #             elif inn[0] == OPCODE.STM.value:

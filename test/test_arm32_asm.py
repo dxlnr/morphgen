@@ -1,6 +1,5 @@
 import sys
 import os
-import glob
 import unittest
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from arm_asm import asm32, parser
 
 TESTFS = ["testfs/arm32_subtract.s", "testfs/arm32_prime.s", "testfs/arm32_fib.s"]
 TARGETFS = ["test/subtract.hex", "test/prime.hex", "test/fib.hex"]
+
 
 class TestARMAssembler(unittest.TestCase):
     def test_arm_asm(self):
@@ -34,7 +34,7 @@ class TestARMAssembler(unittest.TestCase):
                 self.assertEqual(
                     y,
                     x,
-                    f"Test {i + 1} of {TESTFS[i]} failed for instruction {j}: target: {hex(t[j])} != actual: {hex(asm[j])}.",
+                    f"Test {i + 1} of {TESTFS[i]} failed for instruction {j+1}: target: {hex(t[j])} != actual: {hex(asm[j])}.",
                 )
 
 
