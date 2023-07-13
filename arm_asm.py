@@ -53,12 +53,9 @@ class CONDITION(Enum):
 
 class OPCODE(Enum):
     """ARM 32 bit opcodes."""
-
-    # ALU
     ADD = "add"  # Addition
     SUB = "sub"  # Subtraction
     MUL = "mul"  # Multiplication
-    # Load & Store
     STR = "str"  # Store
     STM = "stm"  # Store Multiple
     LDR = "ldr"  # Load
@@ -67,12 +64,10 @@ class OPCODE(Enum):
     MVN = "mvn"  # Move data and negate
     POP = "pop"  # Pop off Stack
     PUSH = "push"  # Push on Stack
-    # Branching
     B = "b"  # Branch
     BL = "bl"  # Branch with Link
     BX = "bx"  # Branch and eXchange
     CMP = "cmp"  # Compare
-    # Extra
     EOR = "eor"  # Bitwise XOR
     LSL = "lsl"  # Logical Shift Left
     LSR = "lsr"  # Logical Shift Right
@@ -89,11 +84,6 @@ class Program(Enum):
     LABEL = 2
     INSTRUCTION = 3
     COMMENT = 4
-
-
-def bm(b: int = 32):
-    """Performs sign extension by number of bits given."""
-    return 2**b - 1
 
 
 def sext(val: int, bits: int = 32):
@@ -173,7 +163,7 @@ def asm32(tokens) -> list[int]:
 
     ins = []
     for idx, t in enumerate(tokens):
-        print(t)
+        # print(t)
         if t[0] == Program.INSTRUCTION:
             inn = split_words(t[1].pop(0), conds)
             cond = (
@@ -267,6 +257,7 @@ def asm32(tokens) -> list[int]:
                     raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
 
             elif inn[0] == OPCODE.LDR.value:
+                op = 2
                 if len(rs) == 1:
                     tl = next(x for x in labels if label == x[1][0].replace(":", ""))
                     imm = sext(tl[2] - t[2] - 2, 24)
@@ -275,7 +266,6 @@ def asm32(tokens) -> list[int]:
                     u_bit = 0 if int(const) < 0 else 1
                     rn = REGISTERS[rs[1]].value
                     imm = abs(int(const))
-                    print(wf, ef)
                     if not wf:
                         o2wo1, p_bit = 1, 0
                     elif wf and ef:
@@ -283,7 +273,7 @@ def asm32(tokens) -> list[int]:
                     else:
                         o2wo1, p_bit = 1, 1
                 elif len(rs) == 3:
-                    pass
+                    op = 3
                 else:
                     raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
                 ins.append(
@@ -293,7 +283,7 @@ def asm32(tokens) -> list[int]:
                     + (o2wo1 << 20)
                     + (u_bit << 23)
                     + (p_bit << 24)
-                    + (0b010 << 25)
+                    + (op << 25)
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.MOV.value:
@@ -317,7 +307,6 @@ def asm32(tokens) -> list[int]:
                     + (op << 23)
                     + (cond << 28)
                 )
-                print(hex(ins[-1]))
             elif inn[0] == OPCODE.PUSH.value:
                 registers_list = 0
                 for i in reversed(REGISTERS.as_strs()):
@@ -336,6 +325,7 @@ def asm32(tokens) -> list[int]:
                     op = 0x35
                 elif len(rs) == 2:
                     op = 0x15
+                    imm = REGISTERS[rs[1]].value
                 elif len(rs) == 3:
                     op = 0x15
                 else:
@@ -365,38 +355,128 @@ def asm32(tokens) -> list[int]:
                 ins.append(
                     REGISTERS[rs[0]].value
                     + (1 << 4)
-                    + (bm(1) << 8)
+                    + (0xFFF << 8)
                     + (18 << 20)
                     + (cond << 28)
                 )
-            #             elif inn[0] == OPCODE.MUL.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.STM.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.LDM.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.MVN.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.EOR.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.LSL.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.LSR.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.ASR.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.AND.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.ORR.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.SWI.value:
-            #                 pass
-            #             elif inn[0] == OPCODE.SWC.value:
-            #                 pass
+            elif inn[0] == OPCODE.MUL.value or inn[0] == OPCODE.MULS.value:
+                s_bit = 0 if inn[0] == OPCODE.MUL.value else 1
+                ins.append(
+                    REGISTERS[rs[1]].value
+                    + (9 << 4)
+                    + (REGISTERS[rs[2]].value << 8)
+                    + (0 << 12)
+                    + (REGISTERS[rs[0]].value << 16)
+                    + (s_bit << 20)
+                    + (0 << 21)
+                    + (cond << 28)
+                )
+            elif inn[0] == OPCODE.MVN.value or inn[0] == OPCODE.MVNS.value:
+                s_bit = 0 if inn[0] == OPCODE.MVN.value else 1
+                if len(rs) == 1:
+                    imm = abs(int(const))
+                    op = 0x1F
+                elif len(rs) == 2:
+                    imm = REGISTERS[rs[1]].value
+                    op = 0xF
+                elif len(rs) == 3:
+                    pass
+                else:
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
+                ins.append(
+                    imm
+                    + (REGISTERS[rs[0]].value << 12)
+                    + (0 << 16)
+                    + (s_bit << 20)
+                    + (op << 21)
+                    + (cond << 28)
+                )
+            elif inn[0] == OPCODE.EOR.value or inn[0] == OPCODE.EORS.value:
+                s_bit = 0 if inn[0] == OPCODE.EOR.value else 1
+                if len(rs) == 2:
+                    imm = abs(int(const))
+                    op = 0x11
+                elif len(rs) == 3:
+                    imm = REGISTERS[rs[2]].value
+                    op = 1
+                elif len(rs) == 4:
+                    pass
+                else:
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
+                ins.append(
+                    imm
+                    + (REGISTERS[rs[0]].value << 12)
+                    + (REGISTERS[rs[1]].value << 16)
+                    + (s_bit << 20)
+                    + (op << 21)
+                    + (cond << 28)
+                )
+            elif inn[0] == OPCODE.AND.value or inn[0] == OPCODE.ANDS.value:
+                s_bit = 0 if inn[0] == OPCODE.AND.value else 1
+                if len(rs) == 2:
+                    imm = abs(int(const))
+                    op = 0x10
+                elif len(rs) == 3:
+                    imm = REGISTERS[rs[2]].value
+                    op = 0
+                elif len(rs) == 4:
+                    pass
+                else:
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
+                ins.append(
+                    imm
+                    + (REGISTERS[rs[0]].value << 12)
+                    + (REGISTERS[rs[1]].value << 16)
+                    + (s_bit << 20)
+                    + (op << 21)
+                    + (cond << 28)
+                )
+            elif inn[0] == OPCODE.ORR.value or inn[0] == OPCODE.ORRS.value:
+                s_bit = 0 if inn[0] == OPCODE.ORR.value else 1
+                if len(rs) == 2:
+                    imm = abs(int(const))
+                    op = 0x1C
+                elif len(rs) == 3:
+                    imm = REGISTERS[rs[2]].value
+                    op = 0xC
+                elif len(rs) == 4:
+                    pass
+                else:
+                    raise RuntimeError(f"Invalid number of registers in {t[0][0]}.")
+                ins.append(
+                    imm
+                    + (REGISTERS[rs[0]].value << 12)
+                    + (REGISTERS[rs[1]].value << 16)
+                    + (s_bit << 20)
+                    + (op << 21)
+                    + (cond << 28)
+                )
+            elif inn[0] == OPCODE.ASR.value:
+                op = 0xD
+                if len(rs) == 2:
+                    imm = REGISTERS[rs[2]].value + (5 << 4) + abs(int(const))
+                elif len(rs) == 3:
+                    imm = REGISTERS[rs[2]].value
+                ins.append(
+                    imm
+                    + (REGISTERS[rs[0]].value << 12)
+                    + (0 << 16)
+                    + (s_bit << 20)
+                    + (op << 21)
+                    + (cond << 28)
+                )
+            # elif inn[0] == OPCODE.STM.value:
+            #     pass
+            # elif inn[0] == OPCODE.LDM.value:
+            #     pass
+            # elif inn[0] == OPCODE.LSL.value:
+            #     pass
+            # elif inn[0] == OPCODE.LSR.value:
+            #     pass
             else:
                 raise RuntimeError(f"OPCODE '{inn[0]}' not supported.")
 
-    [print("{0:b}".format(i)) for i in ins]
+    # [print("{0} {1:b}".format(idx + 1, i)) for idx, i in enumerate(ins)]
     return ins
 
 
