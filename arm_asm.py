@@ -53,6 +53,7 @@ class CONDITION(Enum):
 
 class OPCODE(Enum):
     """ARM 32 bit opcodes."""
+
     ADD = "add"  # Addition
     SUB = "sub"  # Subtraction
     MUL = "mul"  # Multiplication
@@ -125,6 +126,44 @@ def check_pc(insb: list[str]) -> bool:
     return list(filter(lambda x: x == "pc", insb))
 
 
+def prepare_labels(tokens: list[tuple]):
+    """."""
+    res = []
+    labels = list(filter(lambda c: c[0] == Program.LABEL, tokens))
+    label_names = [lab[1][0].replace(":", "") for lab in labels]
+
+    for li, label in enumerate(labels):
+        idx = tokens.index(label)
+        for i in range(idx + 1, len(tokens)):
+            if i == idx + 1:
+                res.append([label_names[li], label[2], label_names[li]])
+            if tokens[i][0] == Program.INSTRUCTION:
+                break
+            if tokens[i][0] == Program.LABEL:
+                break
+            if tokens[i][0] == Program.DIRECTIVE:
+                for wi, w in enumerate(tokens[i][1]):
+                    if w == ".word":
+                        if tokens[i][1][wi + 1] in label_names:
+                            res[-1][2] = tokens[i][1][wi + 1]
+                            break
+    return res
+
+
+def get_off_start(labels, label, count) -> int:
+    """Returns the offset of the label from the start of the program."""
+    label = label if not type(label) == list else label[0]
+    tl = next(x for x in labels if label == x[0])
+    u = 1 if tl[1] > count else 0
+    off = tl[1]
+    if tl[0] != tl[2]:
+        for n in labels:
+            if n[0] == tl[2]:
+                off += abs(n[1] - tl[1]) - 1
+                break
+    return off, u
+
+
 def parser(opdc: str):
     """Reads the assmebly code and returns list of tokenized symbols.
 
@@ -159,11 +198,10 @@ def asm32(tokens) -> list[int]:
     :raises: RuntimeError if the instruction is not supported.
     """
     regs, conds = frozenset(REGISTERS.as_strs()), frozenset(CONDITION.as_strs())
-    labels = list(filter(lambda c: c[0] == Program.LABEL, tokens))
+    labels = prepare_labels(tokens)
 
     ins = []
     for idx, t in enumerate(tokens):
-        # print(t)
         if t[0] == Program.INSTRUCTION:
             inn = split_words(t[1].pop(0), conds)
             cond = (
@@ -171,7 +209,7 @@ def asm32(tokens) -> list[int]:
             )
             insb = t[1]
             if wf := any(filter(lambda x: x in ["[", "]"], insb)):
-                if insb.index(']') - insb.index('[') <= 2:
+                if insb.index("]") - insb.index("[") <= 2:
                     wf = False
                 insb = list(filter(lambda x: x not in ["[", "]"], insb))
             if bbwf := any(filter(lambda x: x in ["{", "}"], insb)):
@@ -259,8 +297,8 @@ def asm32(tokens) -> list[int]:
             elif inn[0] == OPCODE.LDR.value:
                 op = 2
                 if len(rs) == 1:
-                    tl = next(x for x in labels if label == x[1][0].replace(":", ""))
-                    imm = sext(tl[2] - t[2] - 2, 24)
+                    off, u_bit = get_off_start(labels, label, t[2])
+                    imm = off - t[2] - 2
                     rn = 0xF
                 elif len(rs) == 2:
                     u_bit = 0 if int(const) < 0 else 1
@@ -337,20 +375,16 @@ def asm32(tokens) -> list[int]:
                     + (op << 20)
                     + (cond << 28)
                 )
-            elif inn[0] == OPCODE.B.value:
+            elif inn[0] == OPCODE.B.value or inn[0] == OPCODE.BL.value:
                 if label := check_label(insb):
-                    tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
-                    off = sext(tl[2] - t[2] - 2, 24)
+                    off, u_bit = get_off_start(labels, label, t[2])
+                    u_bit = 1 if imm < 0 else 0
+                    imm = off - t[2] - 2
+                    off = sext(imm, 24)
                 else:
                     off = 0xFFFFFE
-                ins.append(off + (0xA << 24) + (cond << 28))
-            elif inn[0] == OPCODE.BL.value:
-                if label := check_label(insb):
-                    tl = next(x for x in labels if label[0] == x[1][0].replace(":", ""))
-                    off = sext(tl[2] - t[2] - 2, 24)
-                else:
-                    off = 0xFFFFFE
-                ins.append(off + (0xB << 24) + (cond << 28))
+                op = 0xA if inn[0] == OPCODE.B.value else 0xB
+                ins.append(off + (op << 24) + (cond << 28))
             elif inn[0] == OPCODE.BX.value:
                 ins.append(
                     REGISTERS[rs[0]].value
@@ -475,8 +509,6 @@ def asm32(tokens) -> list[int]:
             #     pass
             else:
                 raise RuntimeError(f"OPCODE '{inn[0]}' not supported.")
-
-    # [print("{0} {1:b}".format(idx + 1, i)) for idx, i in enumerate(ins)]
     return ins
 
 
