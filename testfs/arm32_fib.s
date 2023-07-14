@@ -86,7 +86,6 @@ main:
 	mov	r1, r3
 	ldr	r0, .L8
 	bl	printf
-	bl	getchar
 	mov	r3, #0
 	mov	r0, r3
 	sub	sp, fp, #4

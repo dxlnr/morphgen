@@ -22,8 +22,8 @@ echo ".o : fib.c"
 echo ""
 arm-linux-gnueabi-gcc -c -o fib.o testfs/fib.c
 arm-linux-gnueabi-objcopy -S -O binary fib.o fib.bin
-hexdump -e '"%08x " "\n"' fib.bin 
-# hexdump -e '"%08x " "\n"' fib.bin > fib.hex
+# hexdump -e '"%08x " "\n"' fib.bin 
+hexdump -e '"%08x " "\n"' fib.bin > fib.hex
 rm fib.o fib.bin
 
 # To get the final executable, run the following commands:

@@ -2,7 +2,7 @@
 
 ## RISC-V
 
-Implementing a Processor using the [RISC-V](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) instruction set. 
+Implementing an Assembler & Processor using the [RISC-V](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) instruction set and [arm](https://en.wikipedia.org/wiki/ARM_architecture_family). 
 
 ### CPU
 
@@ -12,6 +12,11 @@ Please follow along the installation [guide](modules/README.md).
 Run the tests via:
 ```bash
 python riscv_cpu.py
+```
+
+**Verilog**
+
+```bash
 ```
 
 ### Assembler 

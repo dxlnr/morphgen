@@ -2,10 +2,6 @@ Small example for investigating ELF. Run:
     $ gcc -Wall -o mininal mininal.c
     $ readelf -a mininal    
 
-Linux Programmers Manual
-    $ man elf
-
-
 Compile to RISCV assembly using riscv-gnu-toolchain
     
     Running a riscv compile program on linux using qemu (pretty neat)
@@ -21,3 +17,7 @@ Compile to RISCV assembly using riscv-gnu-toolchain
 
 ARM
     $ arm-linux-gnueabi-gcc -S testfs/minimal.c -o testfs/minimal_arm.s
+
+    Running arm cross-compiled program using qemu
+    $ arm-linux-gnueabihf-gcc -o fib testfs/fib.c
+    $ qemu-arm -L /usr/arm-linux-gnueabihf ./fib

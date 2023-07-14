@@ -155,11 +155,11 @@ def get_off_start(labels, label, count) -> int:
     label = label if not type(label) == list else label[0]
     tl = next(x for x in labels if label == x[0])
     u = 1 if tl[1] > count else 0
-    off = tl[1]
+    off = [tl[1]]
     if tl[0] != tl[2]:
         for n in labels:
             if n[0] == tl[2]:
-                off += abs(n[1] - tl[1]) - 1
+                off.append(n[1])
                 break
     return off, u
 
@@ -298,7 +298,11 @@ def asm32(tokens) -> list[int]:
                 op = 2
                 if len(rs) == 1:
                     off, u_bit = get_off_start(labels, label, t[2])
-                    imm = off - t[2] - 2
+                    imm = (
+                        off[0] - t[2] - 2
+                        if len(off) == 1
+                        else sum(abs(o - t[2]) for o in off) + 1
+                    )
                     rn = 0xF
                 elif len(rs) == 2:
                     u_bit = 0 if int(const) < 0 else 1
@@ -378,8 +382,11 @@ def asm32(tokens) -> list[int]:
             elif inn[0] == OPCODE.B.value or inn[0] == OPCODE.BL.value:
                 if label := check_label(insb):
                     off, u_bit = get_off_start(labels, label, t[2])
-                    u_bit = 1 if imm < 0 else 0
-                    imm = off - t[2] - 2
+                    imm = (
+                        off[0] - t[2] - 2
+                        if len(off) == 1
+                        else sum(abs(o - t[2]) for o in off) + 1
+                    )
                     off = sext(imm, 24)
                 else:
                     off = 0xFFFFFE
