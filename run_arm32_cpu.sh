@@ -1,5 +1,5 @@
 #!/bin/bash -e
-
-iverilog -Wall -o acpu cpu/ram.v cpu/arm_cpu.v && vvp acpu 
-
-rm -rf acpu
+python3 makehex.py $1 > /tmp/test.bin
+iverilog -Wall -o acpu cpu/ram.v cpu/arm_cpu.v && vvp acpu +firmware=/test/subtract.bin
+rm -rf acpu 
+rm -rf tmp/test.bin
