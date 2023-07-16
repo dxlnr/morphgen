@@ -16,7 +16,7 @@ module arm_cpu
     #(parameter ARCH = 32
     )(
     input clk, 
-    input resetn,
+    input reset_n,
     input [31:0] inst,
     output [31:0] pc,
     output [31:0] outM,
