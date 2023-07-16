@@ -1,4 +1,4 @@
-// ARM32 CPU Implementation
+// ARM32 CPU 
 
 module decode(
     input [31:0] inst,
@@ -12,7 +12,7 @@ module decode(
     assign addressM = 0;
 endmodule
 
-module arm_cpu 
+module processor
     #(parameter ARCH = 32
     )(
     input clk, 
@@ -22,7 +22,12 @@ module arm_cpu
     output [31:0] outM,
     output [31:0] writeM,
     output [31:0] addressM
-    ); 
+    );
+
+    reg [31:0] dout;
+    ram #(.DEPTH(4096)) r (
+        .clk(clk)
+    );
 
     always @(posedge clk) begin
     end

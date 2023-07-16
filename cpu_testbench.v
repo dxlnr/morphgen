@@ -1,3 +1,6 @@
+`define hdl_path_regf c.regs
+
+
 module cpu_testbench #(parameter PERIOD = 10);
     parameter CLOCK_PERIOD_NS = 10;
 
@@ -12,7 +15,7 @@ module cpu_testbench #(parameter PERIOD = 10);
     wire [31:0] writeM;
     wire [31:0] addressM;
 
-    arm_cpu cpu (
+    processor p (
         .clk(clk),
         .reset_n(reset_n),
         .inst(inst),
@@ -22,14 +25,19 @@ module cpu_testbench #(parameter PERIOD = 10);
         .addressM(addressM)
     );
 
-    initial 
-    begin 
-        $display("Testing ARM CPU");
+    initial begin 
+        string firmware;
         clk = 0; 
         reset_n = 0;
-        $display($sformatf("Using %s as firmware", firmware));
-        // $readmemh(firmware, mem);
-        // $display("mem[0] = %b", mem[0]);
+        if ($value$plusargs("firmware=%s", firmware)) begin
+            $display($sformatf("Using %s as firmware", firmware));
+        end else begin
+            $display($sformatf("Expecting a command line argument %s", firmware), "ERROR");
+            $finish;
+        end
+        $readmemh(firmware, p.r.mem);
+
+        $display("ARM Processor Testbench.");
     end 
 
     // always #CLOCK_PERIOD_NS clk = ~clk;

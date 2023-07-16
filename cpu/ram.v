@@ -11,12 +11,25 @@ module single_port_ram
     input we,
     output [D_BITS - 1:0] dout
 );    
-    reg [D_BITS:0] mem [0:BLOCK_SIZE];
+    reg [D_BITS - 1:0] dout;
+    reg [D_BITS - 1:0] mem [0:BLOCK_SIZE];
     
     always @ (posedge clk) begin 
-        if (we) begin
+        if (we) 
             mem[addr] <= din;
-        end
+        dout <= mem[addr];
     end
-    assign dout = mem[addr];
+endmodule
+
+
+module ram 
+    #(parameter DEPTH=4096,
+      parameter D_BITS=32,
+      parameter ADDR_W=5
+    )(
+    input clk 
+    ); 
+
+    reg [D_BITS - 1:0] mem [0:DEPTH - 1];
+
 endmodule
