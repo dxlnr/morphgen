@@ -19,7 +19,7 @@ class Registers:
         self.registers[key] = value & bm()
 
 
-def set():
+def reset():
     """Initializes memory."""
     global registers, memory, PC
     # 64k memory
@@ -71,7 +71,7 @@ def wmem(addr, data):
     global memory
     addr -= 0x80000000
     assert addr >= 0 and addr < len(memory)
-    memory = memory[:addr] + data + memory[addr + len(data) :]
+    memory = memory[:addr] + data + memory[addr + len(data):]
 
 
 def fetch32(addr):
@@ -344,7 +344,7 @@ if __name__ == "__main__":
             continue
         print(f"Execute : {x}")
         # Reset memory and registers.
-        set()
+        reset()
         # Reading the elf program header to memory.
         memory = elf_reader(memory, x)
 

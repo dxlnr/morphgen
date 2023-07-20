@@ -1,39 +1,25 @@
 // ARM32 CPU 
 
-module decode(
-    input [31:0] inst,
-    output [31:0] outM,
-    output [31:0] writeM,
-    output [31:0] addressM
-    );
-
-    assign outM = 0;
-    assign writeM = 0;
-    assign addressM = 0;
-endmodule
-
 module processor
     #(parameter ARCH = 32,
       parameter RAM_SIZE = 4096
     )(
     input clk, 
-    input reset_n,
-    input [31:0] inst,
-    output [31:0] pc,
-    output [31:0] outM,
-    output [31:0] writeM,
-    output [31:0] addressM
+    input reset_n
     );
 
-    reg [31:0] dout;
+    reg [ARCH-1:0] registers [0:ARCH-1];
+    reg [ARCH-1:0] ins;
+    reg [ARCH-1:0] pc;
+
     ram #(.DEPTH(4096)) r (
         .clk(clk)
     );
-
-    initial begin
-        $display("arm32 cpu");
-    end
  
     always @(posedge clk) begin
+        if (!reset_n) pc <= 0;
+        
+        ins <= r.mem[pc];
+        $display("ins: %h", ins, ", pc: %h", pc);
     end
 endmodule
