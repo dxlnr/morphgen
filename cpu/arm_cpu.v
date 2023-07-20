@@ -13,7 +13,8 @@ module decode(
 endmodule
 
 module processor
-    #(parameter ARCH = 32
+    #(parameter ARCH = 32,
+      parameter RAM_SIZE = 4096
     )(
     input clk, 
     input reset_n,
@@ -29,10 +30,10 @@ module processor
         .clk(clk)
     );
 
-    always @(posedge clk) begin
-    end
-
     initial begin
         $display("arm32 cpu");
+    end
+ 
+    always @(posedge clk) begin
     end
 endmodule

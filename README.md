@@ -17,6 +17,7 @@ python riscv_cpu.py
 **Verilog**
 
 ```bash
+./run_arm32_cpu.sh test/subtract.hex
 ```
 
 ### Assembler 
