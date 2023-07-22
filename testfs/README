@@ -21,3 +21,11 @@ ARM
     Running arm cross-compiled program using qemu
     $ arm-linux-gnueabihf-gcc -o fib testfs/fib.c
     $ qemu-arm -L /usr/arm-linux-gnueabihf ./fib
+
+
+    Get the register content at end of program
+    $ arm-linux-gnueabihf-gcc -o sub testfs/sub.c
+    $ gdb-multiarch ./sub  # start gdb but cross-compiled
+    $ (gdb) run
+    $ (gdb) info registers
+
