@@ -98,6 +98,7 @@ module processor
     reg [ARCH-1:0] registers [0:16];
     reg [ARCH-1:0] ins;
     reg [ARCH-1:0] pc;
+    reg [6:0] step;
 
     ram #(.DEPTH(4096)) r (
         .clk(clk)
@@ -110,15 +111,14 @@ module processor
     wire [7:0] ops = ins[27:21];
     wire [3:0] cond = ins[31:28];
 
-
     // ALU stuff
     reg [ARCH-1:0] imm32;
-    wire [ARCH-1:0] offset;
-    wire cin;
-    wire flag_n;
-    wire flag_z;
-    wire flag_c;
-    wire flag_v;
+    reg [ARCH-1:0] offset;
+    reg cin;
+    reg flag_n;
+    reg flag_z;
+    reg flag_c;
+    reg flag_v;
 
     ALU alu (
         .ops(ops),
@@ -133,16 +133,23 @@ module processor
     );
 
     always @(posedge clk) begin
+        step <= step << 1;
         if (!reset_n) begin 
             pc <= 0;
             for (integer i=0; i<32; i=i+1) registers[i] <= 0;
             trap <= 1'b0;
+            step <= 1'b1;
         end
 
         ins <= r.mem[pc];
         $display("\n");
         $display("ins: %h", ins, ", pc: %h", pc);
         $display("%b", cond, " %b", ops, " %b", s, " %b", rs, " %b", rd, " %b", imm12);
+
+        $display("r00: %h", registers[0], ", r01: %h", registers[1], ", r02: %h", registers[2], ", r03: %h", registers[3]);
+        $display("r04: %h", registers[4], ", r05: %h", registers[5], ", r06: %h", registers[6], ", r07: %h", registers[7]);
+        $display("r08: %h", registers[8], ", r09: %h", registers[9], ", r10: %h", registers[10], ",  fp: %h", registers[11]);
+        $display(" ip: %h", registers[12], ",  sp: %h", registers[13], ",  lr: %h", registers[14], ",  pc: %h", registers[15]);
 
         case (ops)   
             8'b0000000: begin
@@ -188,6 +195,14 @@ module processor
             8'b0010100: begin
                 // ADD (immediate, to PC) & ADD, ADDS (immediate)
                 imm32 <= { {20{1'b0}}, imm12 };
+                $display("imm12: %h", imm12, ", imm32: %h", imm32, ", offset: %h", offset);
+                cin <= 1'b0;
+                if (rd == 15) begin
+                    $display("ADD instr UNPREDICTABLE");
+                    trap <= 1'b1;
+                end else begin
+                    registers[rd] <= offset;
+                end
             end
             8'b0010101: begin
             end
@@ -195,7 +210,6 @@ module processor
             end
             8'b0010111: begin
             end
-
             8'b0101001: begin
                 // STR (immediate):
                 // offset_addr = if add (ins[23]) then (R[n] + imm32) else (R[n] - imm32);
@@ -204,5 +218,9 @@ module processor
                 // if wback then R[n] = offset_addr;
             end
         endcase
+
+        if (step[6] == 1'b1) begin
+            pc <= pc + 1;
+        end
     end
 endmodule

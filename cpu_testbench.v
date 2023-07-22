@@ -34,7 +34,7 @@ module cpu_testbench #(parameter PERIOD = 10);
     end
 
     initial begin
-        #200
+        #500
         $display("\nfinished.");
         $finish;
     end
