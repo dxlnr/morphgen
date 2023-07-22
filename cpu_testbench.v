@@ -1,7 +1,7 @@
 `define hdl_path_regf c.regs
 
 module cpu_testbench #(parameter PERIOD = 10);
-    parameter CLOCK_PERIOD_NS = 10;
+    parameter CLOCK_PERIOD_NS = 5;
 
 	reg clk;
     reg reset_n;
@@ -33,8 +33,13 @@ module cpu_testbench #(parameter PERIOD = 10);
         reset_n <= 1;
     end
 
+    always @(posedge trap) begin
+        $display("TRAP. finished.");
+        $finish;
+    end
+
     initial begin
-        #500
+        #1500
         $display("\nfinished.");
         $finish;
     end

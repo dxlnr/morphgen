@@ -1,5 +1,5 @@
-// ARM32 CPU 
-//
+// ARM32 CPU Implementation
+
 module UInt
     #(parameter N = 32
     )(
@@ -21,7 +21,7 @@ module AddWithCarry
     input  wire [N-1:0] x,
     input  wire [N-1:0] y,
     input  wire         cin,
-    output reg [N-1:0]  result,
+    output wire [N-1:0]  result,
     output wire         n,
     output wire         z,
     output wire         c,
@@ -35,7 +35,6 @@ module AddWithCarry
     always @* begin
         signed_sum = $signed(x) + $signed(y) + cin;
     end
-
     assign result = unsigned_sum[N-1:0];
     assign n = result[N-1];
     assign z = (result == 0);
@@ -49,14 +48,14 @@ module ALU
     input wire [7:0]  ops,
     input wire [31:0] x,
     input wire [31:0] y,
-    input  wire       cin,
+    input wire        cin,
     output reg [31:0] result,
     output reg        n,
     output reg        z,
     output reg        c,
     output reg        v 
 );
-    wire [31:0] pend;
+    wire [N-1:0] add_w_c_result;
     wire tn;
     wire tz;
     wire tc;
@@ -66,7 +65,7 @@ module ALU
         .x(x),
         .y(y),
         .cin(cin),
-        .result(pend),
+        .result(add_w_c_result),
         .n(tn),
         .z(tz),
         .c(tc),
@@ -74,9 +73,9 @@ module ALU
     );
 
     always @* begin
-        case (ops[3:0])
+        case (ops[6:3])
             4'b0010: begin 
-                result <= pend;
+                result <= add_w_c_result;
                 n <= tn;
                 z <= tz;
                 c <= tc;
@@ -108,7 +107,7 @@ module processor
     wire [3:0] rd = ins[15:12];
     wire [3:0] rs = ins[19:16];
     wire s = ins[20];
-    wire [7:0] ops = ins[27:21];
+    wire [6:0] ops = ins[27:21];
     wire [3:0] cond = ins[31:28];
 
     // ALU stuff
@@ -146,71 +145,87 @@ module processor
         $display("ins: %h", ins, ", pc: %h", pc);
         $display("%b", cond, " %b", ops, " %b", s, " %b", rs, " %b", rd, " %b", imm12);
 
-        $display("r00: %h", registers[0], ", r01: %h", registers[1], ", r02: %h", registers[2], ", r03: %h", registers[3]);
-        $display("r04: %h", registers[4], ", r05: %h", registers[5], ", r06: %h", registers[6], ", r07: %h", registers[7]);
-        $display("r08: %h", registers[8], ", r09: %h", registers[9], ", r10: %h", registers[10], ",  fp: %h", registers[11]);
-        $display(" ip: %h", registers[12], ",  sp: %h", registers[13], ",  lr: %h", registers[14], ",  pc: %h", registers[15]);
+        $display("r00: %h", registers[0], ",  r01: %h", registers[1], ",  r02: %h", registers[2], ",  r03: %h", registers[3], ",  r04: %h", registers[4]);
+        $display("r05: %h", registers[5], ",  r06: %h", registers[6], ",  r07: %h", registers[7], ",  r08: %h", registers[8], ",  r09: %h", registers[9]);
+        $display("r10: %h", registers[10], ",   fp: %h", registers[11], ",   ip: %h", registers[12], ",   sp: %h", registers[13], ",   lr: %h", registers[14]);
+        $display(" pc: %h", registers[15], ", cpsr: %h", registers[16]);
+
+        $display("step: %b", step[6]);
 
         case (ops)   
-            8'b0000000: begin
+            7'b0000000: begin
             end
-            8'b0000001: begin
+            7'b0000001: begin
             end
-            8'b0000010: begin
+            7'b0000010: begin
             end
-            8'b0000011: begin
+            7'b0000011: begin
             end
-            8'b0000100: begin
+            7'b0000100: begin
             end
-            8'b0000101: begin
+            7'b0000101: begin
             end
-            8'b0000110: begin
+            7'b0000110: begin
             end
-            8'b0000111: begin
+            7'b0000111: begin
             end
-            8'b0001000: begin
+            7'b0001000: begin
             end
-            8'b0001001: begin
+            7'b0001001: begin
             end
-            8'b0001010: begin
+            7'b0001010: begin
             end
-            8'b0001011: begin
+            7'b0001011: begin
             end
-            8'b0001100: begin
+            7'b0001100: begin
             end
-            8'b0001101: begin
+            7'b0001101: begin
             end
-            8'b0001110: begin
+            7'b0001110: begin
             end
-            8'b0001111: begin
+            7'b0001111: begin
             end
-            8'b0010000: begin
+            7'b0010000: begin
             end
-            8'b0010001: begin
+            7'b0010001: begin
             end
-            8'b0010010: begin
-            end
-            8'b0010011: begin
-            end
-            8'b0010100: begin
-                // ADD (immediate, to PC) & ADD, ADDS (immediate)
-                imm32 <= { {20{1'b0}}, imm12 };
-                $display("imm12: %h", imm12, ", imm32: %h", imm32, ", offset: %h", offset);
-                cin <= 1'b0;
+            7'b0010010: begin
+                // SUB, SUBS (immediate)
+                imm32 <= ~{ {20{1'b0}}, imm12 };
+                cin <= 1'b1;
                 if (rd == 15) begin
-                    $display("ADD instr UNPREDICTABLE");
                     trap <= 1'b1;
                 end else begin
                     registers[rd] <= offset;
+                    registers[16][0] <= flag_n;
+                    registers[16][1] <= flag_z;
+                    registers[16][2] <= flag_c;
+                    registers[16][3] <= flag_v;
                 end
             end
-            8'b0010101: begin
+            7'b0010011: begin
             end
-            8'b0010110: begin
+            7'b0010100: begin
+                // ADD (immediate, to PC) & ADD, ADDS (immediate)
+                imm32 <= { {20{1'b0}}, imm12 };
+                cin <= 1'b0;
+                if (rd == 15) begin
+                    trap <= 1'b1;
+                end else begin
+                    registers[rd] <= offset;
+                    registers[16][0] <= flag_n;
+                    registers[16][1] <= flag_z;
+                    registers[16][2] <= flag_c;
+                    registers[16][3] <= flag_v;
+                end
             end
-            8'b0010111: begin
+            7'b0010101: begin
             end
-            8'b0101001: begin
+            7'b0010110: begin
+            end
+            7'b0010111: begin
+            end
+            7'b0101001: begin
                 // STR (immediate):
                 // offset_addr = if add (ins[23]) then (R[n] + imm32) else (R[n] - imm32);
                 // address = if index then offset_addr else R[n];
@@ -221,6 +236,7 @@ module processor
 
         if (step[6] == 1'b1) begin
             pc <= pc + 1;
+            step <= 1'b1;
         end
     end
 endmodule
