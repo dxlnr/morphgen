@@ -1,15 +1,16 @@
 `define hdl_path_regf c.regs
 
-
 module cpu_testbench #(parameter PERIOD = 10);
     parameter CLOCK_PERIOD_NS = 10;
 
 	reg clk;
     reg reset_n;
+    wire trap;
 
     processor p (
         .clk(clk),
-        .reset_n(reset_n)
+        .reset_n(reset_n),
+        .trap(trap)
     );
 
     initial begin 

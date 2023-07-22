@@ -21,6 +21,7 @@ class REGISTERS(Enum):
     sp = 13
     lr = 14
     pc = 15
+    cpsr = 16
 
     @classmethod
     def as_strs(cls):
