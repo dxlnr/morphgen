@@ -71,11 +71,11 @@ endmodule
 module ToImm32
     #(parameter N = 32
     )(
-    input wire         ops,
+    input wire [2:0]   ops,
     input wire [11:0]  imm12,
     input wire         cin,
     output reg [N-1:0] imm32,
-    output reg cout
+    output reg         cout
 );
     wire [N-1:0] exp_imm;
     wire exp_cout;
@@ -89,10 +89,14 @@ module ToImm32
 
     always @* begin
         case (ops)  
-            1'b0: begin
+            2'b0: begin
                imm32 <= { {20{1'b0}}, imm12 };
             end
-            1'b1: begin
+            2'b1: begin
+               // SUB
+               imm32 <= ~{ {20{1'b0}}, imm12 };
+            end
+            2'b10: begin
                 imm32 <= exp_imm;
                 cout <= exp_cout;
             end
@@ -103,44 +107,32 @@ endmodule
 module ALU
     #(parameter N = 32
     )(
-    input wire [6:0]  ops,
-    input wire [31:0] x,
-    input wire [31:0] y,
-    input wire        cin,
-    output reg [31:0] result,
-    output reg        n,
-    output reg        z,
-    output reg        c,
-    output reg        v 
+    input wire [6:0]   ops,
+    input wire [N-1:0] x,
+    input wire [N-1:0] y,
+    input wire         alu_neg,
+    output reg [N-1:0] result,
 );
-    wire [N-1:0] add_w_c_result;
-    wire tn;
-    wire tz;
-    wire tc;
-    wire tv;
-
-    AddWithCarry #(.N(N)) addr_w_c (
-        .x(x),
-        .y(y),
-        .cin(cin),
-        .result(add_w_c_result),
-        .n(tn),
-        .z(tz),
-        .c(tc),
-        .v(tv)
-    );
-
     always @* begin
         case (ops[6:3])
-            4'b0010: begin 
-                result <= add_w_c_result;
-                n <= tn;
-                z <= tz;
-                c <= tc;
-                v <= tv;
-            end
+            4'b0010: result <= alu_neg ? (x - y) : (x + y);
+            4'b0010: result <= x - y;
+            4'b0000: result <= x & y;
+			4'b0001: result <= x | y;
+			4'b0111: result <= y;
+			4'b1100: result <= ~(x | y);
         endcase
     end
+endmodule
+
+module arm32_decoder
+    #(parameter ARCH = 32
+    )(
+    input clk, 
+    input wire [ARCH-1:0] ins,
+    output reg [ARCH-1:0] pc,
+);
+
 endmodule
 
 module processor
@@ -150,7 +142,7 @@ module processor
     input clk, 
     input reset_n,
     output reg trap
-    );
+);
 
     reg [ARCH-1:0] registers [0:16];
     reg [ARCH-1:0] ins;
@@ -166,6 +158,7 @@ module processor
     wire [3:0] rs = ins[19:16];
     wire s = ins[20];
     wire [6:0] ops = ins[27:21];
+    // wire [3:0] op0 = ins[27:24];
     wire [3:0] cond = ins[31:28];
 
     // expand imm12 to imm32
@@ -182,9 +175,10 @@ module processor
     );
 
     // ALU stuff
-    reg [ARCH-1:0] offset;
+    reg [ARCH-1:0] alu_result;
     reg [ARCH-1:0] alu_left;
     reg [ARCH-1:0] alu_right;
+    reg alu_neg;
     reg cin;
     reg flag_n;
     reg flag_z;
@@ -205,11 +199,12 @@ module processor
 
     reg [ARCH-1:0] offset_addr;
 
+    // Decode & Fetch 
     always @(posedge clk) begin
         step <= step << 1;
         if (!reset_n) begin 
             pc <= 0;
-            for (integer i=0; i<32; i=i+1) registers[i] <= 0;
+            for (integer i=0; i<ARCH; i=i+1) registers[i] <= 0;
             trap <= 1'b0;
             step <= 1'b1;
         end
@@ -255,8 +250,7 @@ module processor
             end
             7'b0010010: begin
                 // SUB, SUBS (immediate)
-                exp_ops <= 1'b0;
-                // imm32 <= ~{ {20{1'b0}}, imm12 };
+                exp_ops <= 2'b01;
                 cin <= 1'b1;
                 if (rd == 15) begin
                     trap <= 1'b1;
@@ -273,7 +267,7 @@ module processor
             end
             7'b0010100: begin
                 // ADD (immediate, to PC) & ADD, ADDS (immediate)
-                // imm32 <= { {20{1'b0}}, imm12 };
+                exp_ops <= 2'b00;
                 cin <= 1'b0;
                 if (rd == 15) begin
                     trap <= 1'b1;
@@ -323,6 +317,7 @@ module processor
             7'b0101001: begin
                 // STR (immediate): P=1, U=0, W=1
                 offset_addr <= rs - { {20{1'b0}}, imm12 };
+                $display("STR (immediate): P=1, U=0, W=1: offset_addr=%d", offset_addr);
                 if (rd == 15) begin
                     r.mem[offset_addr] <= registers[pc];
                 end else begin
@@ -350,6 +345,7 @@ module processor
                 registers[rs] <= offset_addr;
             end
         endcase
+
 
         if (step[6] == 1'b1) begin
             pc <= pc + 1;

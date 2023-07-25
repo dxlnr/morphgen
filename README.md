@@ -6,6 +6,10 @@ Implementing an Assembler & Processor using the [RISC-V](https://riscv.org/wp-co
 
 ### CPU
 
+```mermaid
+fetch -> decode -> execute -> memory access -> write back
+```
+
 For testing the **cpu**, clone and build the `riscv-tests`. The tests can be found in the modules/ folder. 
 Please follow along the installation [guide](modules/README.md).
 
