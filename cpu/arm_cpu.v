@@ -68,72 +68,52 @@ module A32ExpandImm_C
 
 endmodule
 
-module ToImm32
+module arm32_alu
     #(parameter N = 32
     )(
-    input wire [2:0]   ops,
-    input wire [11:0]  imm12,
-    input wire         cin,
-    output reg [N-1:0] imm32,
-    output reg         cout
-);
-    wire [N-1:0] exp_imm;
-    wire exp_cout;
-
-    A32ExpandImm_C #(.N(N)) a32_expand_imm_c (
-        .imm12(imm12),
-        .cin(cin),
-        .imm32(exp_imm),
-        .cout(exp_cout)
-    );
-
-    always @* begin
-        case (ops)  
-            2'b0: begin
-               imm32 <= { {20{1'b0}}, imm12 };
-            end
-            2'b1: begin
-               // SUB
-               imm32 <= ~{ {20{1'b0}}, imm12 };
-            end
-            2'b10: begin
-                imm32 <= exp_imm;
-                cout <= exp_cout;
-            end
-        endcase
-    end
-endmodule
-
-module ALU
-    #(parameter N = 32
-    )(
-    input wire [6:0]   ops,
+    input wire [3:0]   ops,
     input wire [N-1:0] x,
     input wire [N-1:0] y,
-    input wire         alu_neg,
-    output reg [N-1:0] result,
+    input wire         cin,
+    output reg [N-1:0] res,
+    output reg [3:0]   flags
 );
+    reg c;
+    reg v;
+    wire z;
+    wire n;
+
     always @* begin
-        case (ops[6:3])
-            4'b0010: result <= alu_neg ? (x - y) : (x + y);
-            4'b0010: result <= x - y;
-            4'b0000: result <= x & y;
-			4'b0001: result <= x | y;
-			4'b0111: result <= y;
-			4'b1100: result <= ~(x | y);
+        c <= 1'b0;
+        v <= 1'b0;
+        case (ops)
+            4'b0001: res <= y;
+            4'b1001: res <= ~y;
+            4'b0010: {c, res} <= x + y;
+            4'b0011: {c, res} <= x + y + cin;
+            4'b0100: {c, res} <= x - y;
+            4'b0101: {c, res} <= x - y - cin;
+            4'b0110: res <= x & y;
+            4'b0111: res <= x | y;
+            4'b1000: res <= x ^ y;
+            4'b0100: res <= x - y;
+            4'b0110: res <= x & y;
+            4'b0010: res <= x + y;
+            4'b0010: res <= x + y;
         endcase
+
+        if(ops == 4'b0010 || ops == 4'b0011)
+            v <= (x[N-1] == y[N-1]) & (x[N-1] == ~res[N-1]);
+        else if (ops == 4'b0100 || ops == 4'b0101)
+            v <= (x[N-1] == ~y[N-1]) & (x[N-1] == ~res[N-1]);
     end
+
+    assign n = res[N-1];
+    assign z = res == 32'b0 ? 1'b1 : 1'b0;
+
+    assign flags = {c, v, z, n};
 endmodule
 
-module arm32_decoder
-    #(parameter ARCH = 32
-    )(
-    input clk, 
-    input wire [ARCH-1:0] ins,
-    output reg [ARCH-1:0] pc,
-);
-
-endmodule
 
 module processor
     #(parameter ARCH = 32,
@@ -149,57 +129,55 @@ module processor
     reg [ARCH-1:0] pc;
     reg [6:0] step;
 
-    ram #(.DEPTH(4096)) r (
+    ram #(.DEPTH(1024)) r (
         .clk(clk)
     );
 
+    // *** decode ***
     wire [11:0] imm12 = ins[11:0];
+    wire [3:0] rn = ins[3:0];
+    wire op1 = ins[4];
+    wire [3:0] rm = ins[11:8];
     wire [3:0] rd = ins[15:12];
+    wire [3:0] rt = ins[15:12];
     wire [3:0] rs = ins[19:16];
     wire s = ins[20];
+    wire p = ins[24];
+    wire u = ins[23];
+    wire w = ins[21];
     wire [6:0] ops = ins[27:21];
-    // wire [3:0] op0 = ins[27:24];
     wire [3:0] cond = ins[31:28];
 
-    // expand imm12 to imm32
-    reg exp_ops;
-    reg [ARCH-1:0] imm32;
-    reg exp_c;
+    // *** expand imm12 to imm32 ***
+    reg exp_cin;
+    reg [ARCH-1:0] exp_imm;
+    reg exp_cout;
 
-    ToImm32 #(.N(ARCH)) ex_imm_c (
-        .ops(exp_ops),
+    A32ExpandImm_C #(.N(ARCH)) a32_expand_imm_c (
         .imm12(imm12),
-        .cin(registers[16][2]),
-        .imm32(imm32),
-        .cout(exp_c)
+        .cin(exp_cin),
+        .imm32(exp_imm),
+        .cout(exp_cout)
     );
 
-    // ALU stuff
+    reg [ARCH-1:0] imm32;
+
+    // *** ALU ***
     reg [ARCH-1:0] alu_result;
     reg [ARCH-1:0] alu_left;
     reg [ARCH-1:0] alu_right;
     reg alu_neg;
-    reg cin;
-    reg flag_n;
-    reg flag_z;
-    reg flag_c;
-    reg flag_v;
 
-    ALU alu (
-        .ops(ops),
-        .x(alu_left),
-        .y(alu_right),
-        .cin(cin),
-        .result(offset),
-        .n(flag_n),
-        .z(flag_z),
-        .c(flag_c),
-        .v(flag_v)
-    );
+    // arm32_alu alu (
+    //     .ops(ops),
+    //     .x(alu_left),
+    //     .y(alu_right),
+    //     .n(alu_neg),
+    //     .result(alu_result),
+    // );
 
-    reg [ARCH-1:0] offset_addr;
+    // reg [ARCH-1:0] offset_addr;
 
-    // Decode & Fetch 
     always @(posedge clk) begin
         step <= step << 1;
         if (!reset_n) begin 
@@ -250,34 +228,13 @@ module processor
             end
             7'b0010010: begin
                 // SUB, SUBS (immediate)
-                exp_ops <= 2'b01;
-                cin <= 1'b1;
-                if (rd == 15) begin
-                    trap <= 1'b1;
-                end else begin
-                    registers[rd] <= offset;
-                    registers[16][0] <= flag_n;
-                    registers[16][1] <= flag_z;
-                    registers[16][2] <= flag_c;
-                    registers[16][3] <= flag_v;
-                end
             end
             7'b0010011: begin
-                // imm32 <= { {20{1'b0}}, imm12 };
             end
             7'b0010100: begin
                 // ADD (immediate, to PC) & ADD, ADDS (immediate)
-                exp_ops <= 2'b00;
-                cin <= 1'b0;
-                if (rd == 15) begin
-                    trap <= 1'b1;
-                end else begin
-                    registers[rd] <= offset;
-                    registers[16][0] <= flag_n;
-                    registers[16][1] <= flag_z;
-                    registers[16][2] <= flag_c;
-                    registers[16][3] <= flag_v;
-                end
+                imm32 <= exp_imm;
+                $display("ADD rd:%d, imm32:%d", rd, imm32, " - ", "%b", cond, " %b", ops, " %b", s, " %b", rs, " %b", rd, " %b", imm12);
             end
             7'b0010101: begin
             end
@@ -287,65 +244,23 @@ module processor
             end
             7'b0011101: begin
                 // MOV (immediate)
-                if (s == 1'b1) begin
-                    registers[rd] <= imm32;
-                    registers[16][0] <= imm32[ARCH-1];
-                    registers[16][1] <= imm32 == 0;
-                    registers[16][2] <= flag_c;
-                    registers[16][3] <= flag_v;
-                end else begin
-                    registers[rd] <= imm32;
-                end
             end
             7'b0100000: begin
                 // STR (immediate): P=0, U=0, W=0
-                if (rd == 15) begin
-                    r.mem[registers[rs]] <= registers[pc];
-                end else begin
-                    r.mem[registers[rs]] <= registers[rd];
-                end
             end
             7'b0101000: begin
                 // STR (immediate): P=1, U=0, W=0
-                offset_addr <= rs - { {20{1'b0}}, imm12 };
-                if (rd == 15) begin
-                    r.mem[offset_addr] <= registers[pc];
-                end else begin
-                    r.mem[offset_addr] <= registers[rd];
-                end
             end
             7'b0101001: begin
                 // STR (immediate): P=1, U=0, W=1
-                offset_addr <= rs - { {20{1'b0}}, imm12 };
-                $display("STR (immediate): P=1, U=0, W=1: offset_addr=%d", offset_addr);
-                if (rd == 15) begin
-                    r.mem[offset_addr] <= registers[pc];
-                end else begin
-                    r.mem[offset_addr] <= registers[rd];
-                end
-                registers[rs] <= offset_addr;
             end
             7'b0101001: begin
                 // STR (immediate): P=1, U=1, W=0
-                offset_addr <= rs + { {20{1'b0}}, imm12 };
-                if (rd == 15) begin
-                    r.mem[offset_addr] <= registers[pc];
-                end else begin
-                    r.mem[offset_addr] <= registers[rd];
-                end
             end
             7'b0101001: begin
                 // STR (immediate): P=1, U=1, W=1
-                offset_addr <= rs + { {20{1'b0}}, imm12 };
-                if (rd == 15) begin
-                    r.mem[offset_addr] <= registers[pc];
-                end else begin
-                    r.mem[offset_addr] <= registers[rd];
-                end
-                registers[rs] <= offset_addr;
             end
         endcase
-
 
         if (step[6] == 1'b1) begin
             pc <= pc + 1;

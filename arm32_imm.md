@@ -1,0 +1,2 @@
+- ADC, ADCS: imm32 = A32ExpandImm(imm12);
+- ADD, ADDS: imm32 = A32ExpandImm(imm12);
