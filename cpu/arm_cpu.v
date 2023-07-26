@@ -1,70 +1,75 @@
 // ARM32 CPU Implementation
 
-module UInt
+module exp_to_32b_value
     #(parameter N = 32
     )(
-    input wire [N-1:0] x,
-    output reg [N-1:0] result
+    input wire [N-1:0] rm,
+    input wire [11:0]  imm12,
+    input wire i,
+    input wire s,
+    output reg [31:0] res
 );
+
+    reg [31:0] imm32;
+    reg [31:0] r_rotate_imm;
+
+    wire [4:0] shift_imm = imm12[11:7];
+    wire [3:0] rotate_imm = imm12[11:8];
+    wire [1:0] shift = imm12[6:5];
+    wire [7:0] imm8 = imm12[7:0];
+ 
+    assign res = s == 1'b1  ? { {20{imm12[11]}}, imm12} : 
+        i == 1'b1           ? imm32 : 
+        shift == 2'b00      ? rm <<  {1'b0, shift_imm} :
+        shift == 2'b01      ? rm >>  {1'b0, shift_imm} :
+        shift == 2'b10      ? rm >>> {1'b0, shift_imm} :
+        r_rotate_imm; 
+
+    integer k = 0;
     always @* begin
-        result = 0;
-        for (integer i = 0; i < N; i = i + 1) begin
-            if (x[i] == 1'b1)
-                result = result + (1 << i);
+        imm32 <= {24'b0, imm8};
+
+        for(integer k = 0; k < rotate_imm; k = k + 1) begin
+            imm32 <= {imm32[1:0], imm32[31:2]};
+        end    
+
+        r_rotate_imm <= rm;
+
+        for(integer k = 0; k <= imm12[11:7]; k = k + 1) begin
+            r_rotate_imm <= {r_rotate_imm[0], r_rotate_imm[31:0]};
         end
     end
 endmodule
 
-module AddWithCarry
+module arm32_decoder
     #(parameter N = 32
     )(
-    input  wire [N-1:0] x,
-    input  wire [N-1:0] y,
-    input  wire         cin,
-    output wire [N-1:0] result,
-    output wire         n,
-    output wire         z,
-    output wire         c,
-    output wire         v
-);
-    integer unsigned_sum;
-    always @* begin
-        unsigned_sum = x + y + cin;
-    end
-    integer signed_sum;
-    always @* begin
-        signed_sum = $signed(x) + $signed(y) + cin;
-    end
-    assign result = unsigned_sum[N-1:0];
-    assign n = result[N-1];
-    assign z = (result == 0);
-    assign c = (unsigned_sum > {N{1'b1}});
-    assign v = (signed_sum > {N{1'b1}}) || (signed_sum < {N{1'b0}});
-endmodule
+    input wire [N-1:0] pc,
+    input wire [N-1:0] ins,
+    input wire [3:0]   flags,
+    input wire [N-1:0] wb_value,
+    input wire [3:0]   wb_dest
+    );
 
-module A32ExpandImm_C
-    #(parameter N = 32
-    )(
-    input wire [11:0]  imm12,
-    input wire         cin,
-    output reg [N-1:0] imm32,
-    output reg         cout 
-);
-    reg [N-1:0] unrotated_value;
-    always @* begin
-        unrotated_value = {20'b0, imm12[7:0]};
-    end
+    wire cc_res;
+    wire mux_s;
+    wire[9:0] mux_in;
+    wire mem_en;
+    wire s_mem_en;
+    wire wb_en;
+    wire s_wb_en;
+    wire branch_taken;
 
-    reg [4:0] shift_amount;
-    always @* begin
-        shift_amount = 2 * $unsigned(imm12[11:8]);
-    end
-
-    reg [N-1:0] t;
-    always @* begin
-        {t, cout} <= unrotated_value >>> shift_amount;
-    end
-    assign imm32 = t;
+    wire [3:0] cond = ins[31:28];
+    wire [1:0] ins_t = ins[27:26];
+    wire i = ins[25];
+    wire [3:0] opc = ins[24:21];
+    wire s = ins[20];
+    wire [3:0] rn = ins[19:16];
+    wire [3:0] rd = ins[15:12];
+    wire [3:0] rm = ins[3:0];
+    wire [11:0] imm12 = ins[11:0];
+    wire [23:0] imm24 = ins[23:0];
 
 endmodule
 
@@ -194,6 +199,87 @@ module cond (
     end
 endmodule
 
+module control_unit
+    #(parameter N = 32
+    )(
+    input wire [3:0] ops,
+    input wire [1:0] ins_t,
+    input wire       ldr_str,
+    output reg       s_wb_en,
+    output reg[3:0]  s_c,
+    output reg       s_mem_r_en,
+    output reg       s_mem_w_en,
+    output reg       s_br
+);
+
+    always @(ops, ins_t, ldr_str) begin
+        s_mem_r_en = 1'b0;
+        s_mem_w_en = 1'b0;
+        s_wb_en = 1'b0;
+        s_br <= 1'b0;
+        s_c <= 4'b0000;
+        
+        case (ins_t)
+            2'b00: begin // Arithmetic Instruction
+                case (ops)
+                    4'b1101: begin // MOV
+                        s_wb_en <= 1'b1;
+                        s_c <= 4'b0001;
+                    end 
+                    4'b1101: begin // MVN
+                        s_wb_en <= 1'b1;
+                        s_c <= 4'b1001;
+                    end
+                    4'b0100: begin // ADD
+                        s_wb_en <= 1'b1;
+                        s_c <= 4'b0010;
+                    end
+                    4'b0010: begin // SUB
+                        s_wb_en <= 1'b1;
+                        s_c <= 4'b0100;
+                    end
+                    4'b0000: begin // AND
+                        s_wb_en <= 1'b1;
+                        s_c <= 4'b0110;
+                    end
+                    4'b1100: begin // ORR
+                        s_wb_en <= 1'b1;
+                        s_c <= 4'b0111;
+                    end
+                    4'b0001: begin // EOR
+                        s_wb_en <= 1'b1;
+                        s_c <= 4'b1000;
+                    end
+                    4'b1010: begin // CMP
+                        s_c <= 4'b0100;
+                    end
+                    4'b1000: begin // TST
+                        s_c <= 4'b0110;
+                    end 
+                endcase
+            end
+            2'b01: begin // Memory (Load/Store) Instruction
+                case (ldr_str)
+                    1'b1: begin // LDR
+                        s_mem_r_en <= 1'b1;
+                        s_c <= 4'b0010;
+                        s_wb_en <= 1'b1;
+                    end
+                    1'b0: begin // STR
+                        s_mem_w_en <= 1'b1;
+                        s_c <= 4'b0010;
+                    end
+                endcase
+            end
+            2'b10: begin // Branch Instruction
+                s_br <= 1'b1;
+            end
+            2'b11: begin // Co Processor Instruction
+            end
+        endcase
+    end
+endmodule
+
 module processor
     #(parameter ARCH = 32,
       parameter RAM_SIZE = 4096
@@ -228,34 +314,12 @@ module processor
     wire [3:0] cond = ins[31:28];
 
     // *** expand imm12 to imm32 ***
-    reg exp_cin;
-    reg [ARCH-1:0] exp_imm;
-    reg exp_cout;
-
-    A32ExpandImm_C #(.N(ARCH)) a32_expand_imm_c (
-        .imm12(imm12),
-        .cin(exp_cin),
-        .imm32(exp_imm),
-        .cout(exp_cout)
-    );
-
-    reg [ARCH-1:0] imm32;
 
     // *** ALU ***
     reg [ARCH-1:0] alu_result;
     reg [ARCH-1:0] alu_left;
     reg [ARCH-1:0] alu_right;
     reg alu_neg;
-
-    // arm32_alu alu (
-    //     .ops(ops),
-    //     .x(alu_left),
-    //     .y(alu_right),
-    //     .n(alu_neg),
-    //     .result(alu_result),
-    // );
-
-    // reg [ARCH-1:0] offset_addr;
 
     always @(posedge clk) begin
         step <= step << 1;
@@ -267,79 +331,6 @@ module processor
         end
 
         ins <= r.mem[pc];
-
-        case (ops)   
-            7'b0000000: begin
-            end
-            7'b0000001: begin
-            end
-            7'b0000010: begin
-            end
-            7'b0000011: begin
-            end
-            7'b0000100: begin
-            end
-            7'b0000101: begin
-            end
-            7'b0000110: begin
-            end
-            7'b0000111: begin
-            end
-            7'b0001000: begin
-            end
-            7'b0001001: begin
-            end
-            7'b0001010: begin
-            end
-            7'b0001011: begin
-            end
-            7'b0001100: begin
-            end
-            7'b0001101: begin
-            end
-            7'b0001110: begin
-            end
-            7'b0001111: begin
-            end
-            7'b0010000: begin
-            end
-            7'b0010001: begin
-            end
-            7'b0010010: begin
-                // SUB, SUBS (immediate)
-            end
-            7'b0010011: begin
-            end
-            7'b0010100: begin
-                // ADD (immediate, to PC) & ADD, ADDS (immediate)
-                imm32 <= exp_imm;
-                $display("ADD rd:%d, imm32:%d", rd, imm32, " - ", "%b", cond, " %b", ops, " %b", s, " %b", rs, " %b", rd, " %b", imm12);
-            end
-            7'b0010101: begin
-            end
-            7'b0010110: begin
-            end
-            7'b0010111: begin
-            end
-            7'b0011101: begin
-                // MOV (immediate)
-            end
-            7'b0100000: begin
-                // STR (immediate): P=0, U=0, W=0
-            end
-            7'b0101000: begin
-                // STR (immediate): P=1, U=0, W=0
-            end
-            7'b0101001: begin
-                // STR (immediate): P=1, U=0, W=1
-            end
-            7'b0101001: begin
-                // STR (immediate): P=1, U=1, W=0
-            end
-            7'b0101001: begin
-                // STR (immediate): P=1, U=1, W=1
-            end
-        endcase
 
         if (step[6] == 1'b1) begin
             pc <= pc + 1;
