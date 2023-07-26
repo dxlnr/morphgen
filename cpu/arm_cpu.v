@@ -114,6 +114,85 @@ module arm32_alu
     assign flags = {c, v, z, n};
 endmodule
 
+module cond (
+    input wire [3:0] cond,
+    input wire [3:0] flags,
+    output reg       res
+    );
+
+    wire z;
+    wire c;
+    wire n;
+    wire v;
+
+    assign {z, c, n, v} = flags;
+
+    always@(cond, flags) begin
+        res <= 1'b0;
+
+        case(cond)
+            4'b0000: begin
+                if(z == 1'b1)
+                    res <= 1'b1;
+            end
+            4'b0001: begin
+                if(z == 1'b0)
+                    res <= 1'b1;
+            end
+            4'b0010: begin
+                if(c == 1'b1)
+                    res <= 1'b1;
+            end
+            4'b0011:begin
+                if(c == 1'b0)
+                    res = 1'b1;
+            end
+            4'b0100: begin
+                if(n == 1'b1)
+                    res <= 1'b1;
+            end
+            4'b0101: begin
+                if(n == 1'b0)
+                    res <= 1'b1;
+            end
+            4'b0110: begin
+                if(v == 1'b1)
+                    res <= 1'b1;
+            end
+            4'b0111: begin
+                if(v == 1'b0)
+                    res <= 1'b1;
+            end
+            4'b1000: begin
+                if(c == 1'b1 & z == 1'b0)
+                    res <= 1'b1;
+            end
+            4'b1001: begin
+                if(c == 1'b0 & z == 1'b1)
+                    res <= 1'b1;
+            end
+            4'b1010: begin
+                if(n == v)
+                    res <= 1'b1;
+            end
+            4'b1011: begin
+                if(n != v)
+                    res <= 1'b1;
+            end
+            4'b1100: begin
+                if(z == 1'b0 & n == v)
+                    res <= 1'b1;
+            end
+            4'b1101: begin
+                if(z == 1'b1& n != v)
+                    res = 1'b1;
+            end
+            4'b1111: begin
+                res <= 1'b1;
+            end
+        endcase
+    end
+endmodule
 
 module processor
     #(parameter ARCH = 32,
