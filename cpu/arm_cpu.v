@@ -31,7 +31,7 @@ module exp_to_32b_value
 
         for(integer k = 0; k < rotate_imm; k = k + 1) begin
             imm32 <= {imm32[1:0], imm32[31:2]};
-        end    
+        end 
 
         r_rotate_imm <= rm;
 
@@ -44,21 +44,21 @@ endmodule
 module arm32_decoder
     #(parameter N = 32
     )(
-    input wire [N-1:0] pc,
     input wire [N-1:0] ins,
-    input wire [3:0]   flags,
-    input wire [N-1:0] wb_value,
-    input wire [3:0]   wb_dest
+    output reg [3:0]   off
     );
 
     wire cc_res;
-    wire mux_s;
+    wire s_mux;
     wire[9:0] mux_in;
-    wire mem_en;
-    wire s_mem_en;
-    wire wb_en;
+
+    wire [3:0] s_c;
+    wire s_mem_r_en;
+    wire s_mem_w_en;
     wire s_wb_en;
-    wire branch_taken;
+    wire s_br;
+    wire s_s;
+    wire s_imm;
 
     wire [3:0] cond = ins[31:28];
     wire [1:0] ins_t = ins[27:26];
@@ -70,6 +70,28 @@ module arm32_decoder
     wire [3:0] rm = ins[3:0];
     wire [11:0] imm12 = ins[11:0];
     wire [23:0] imm24 = ins[23:0];
+
+    control_unit cu (
+        .ops(opc),
+        .ins_t(ins_t),
+        .ldr_str(s),
+        .s_wb_en(s_wb_en),
+        .s_c(s_c),
+        .s_mem_r_en(s_mem_r_en),
+        .s_mem_w_en(s_mem_w_en),
+        .s_br(s_br)
+    );
+
+    cond cc (
+        .cond(cond),
+        .flags(flags),
+        .res(cc_res)
+    );
+
+    assign s_mux = ~cc_res | 1'b0; 
+    assign mux_in = {s_mem_r_en, s_mem_w_en, s_wb_en, s_s, s_br, s_imm, s_c};
+    assign {s_mem_r_en, s_mem_w_en, s_wb_en, s_s, s_br, s_imm, s_c} = s_mux ? 10'b0: mux_in;
+    assign off = s_mem_w_en ? rd : rm;
 
 endmodule
 
