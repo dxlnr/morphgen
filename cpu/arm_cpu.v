@@ -3,7 +3,7 @@
 module exp_to_32b_value
     #(parameter N = 32
     )(
-    input wire [N-1:0] rm,
+    input wire [N-1:0]  rm,
     input wire [11:0]  imm12,
     input wire i,
     input wire s,
@@ -44,14 +44,19 @@ endmodule
 module arm32_decoder
     #(parameter N = 32
     )(
+    input wire [N-1:0] registers [0:16],
     input wire [N-1:0] ins,
     input wire [3:0]   flags,
+    output reg [11:0]  imm12,
+    output reg         s,
     output reg         i,
     output reg         f_c,
     output reg [3:0]   rm,
     output reg [3:0]   rn,
-    output reg [3:0]   s_mem,
-    output reg [3:0]   s_alu 
+    output reg [3:0]   r_mem,
+    output reg [3:0]   s_alu,
+    output reg         s_mem_r_en, 
+    output reg         s_mem_w_en
 );
 
     wire cc_res;
@@ -59,20 +64,18 @@ module arm32_decoder
     wire[9:0] mux_in;
 
     wire [3:0] s_c;
-    wire s_mem_r_en;
-    wire s_mem_w_en;
     wire s_wb_en;
     wire s_br;
     wire s_s;
     wire s_imm;
+    wire w_mem_r_en; 
+    wire w_mem_w_en;
 
     wire [3:0] cond = ins[31:28];
     wire [1:0] ins_t = ins[27:26];
     wire [3:0] opc = ins[24:21];
-    wire s = ins[20];
     wire [3:0] rd = ins[15:12];
-    wire [11:0] imm12 = ins[11:0];
-    wire [23:0] imm24 = ins[23:0];
+    //wire [23:0] imm24 = ins[23:0];
 
     control_unit cu (
         .ops(opc),
@@ -80,8 +83,8 @@ module arm32_decoder
         .ldr_str(s),
         .s_c(s_c),
         .s_wb_en(s_wb_en),
-        .s_mem_r_en(s_mem_r_en),
-        .s_mem_w_en(s_mem_w_en),
+        .s_mem_r_en(w_mem_r_en),
+        .s_mem_w_en(w_mem_w_en),
         .s_br(s_br)
     );
 
@@ -91,15 +94,17 @@ module arm32_decoder
         .res(cc_res)
     );
 
+    assign imm12 = ins[11:0];
     assign rm = ins[3:0];
     assign rn = ins[19:16];
+    assign s = ins[20];
     assign i = ins[25];
     assign f_c = flags[2];
     assign s_alu = s_c;
     assign s_mux = ~cc_res | 1'b0; 
-    assign mux_in = {s_mem_r_en, s_mem_w_en, s_wb_en, s_s, s_br, s_imm, s_c};
+    assign mux_in = {w_mem_r_en, w_mem_w_en, s_wb_en, s_s, s_br, s_imm, s_c};
     assign {s_mem_r_en, s_mem_w_en, s_wb_en, s_s, s_br, s_imm, s_c} = s_mux ? 10'b0: mux_in;
-    assign s_mem = s_mem_w_en ? rd : rm;
+    assign r_mem = s_mem_w_en ? rd : rm;
 
 endmodule
 
@@ -328,39 +333,51 @@ module processor
         .clk(clk)
     );
 
+    reg [ARCH-1:0] v_wb;
+
     // *** decode ***
-    wire [3:0] rm;
-    wire [3:0] rn;
-    wire [3:0] s_alu;
-    wire [3:0] s_mem;
-    wire imm;
-    wire f_c;
+    reg [3:0] flags;
+    reg [11:0] imm12;
+    reg [3:0] rm;
+    reg [3:0] rn;
+    reg [3:0] s_alu;
+    reg [3:0] r_mem;
+    reg s;
+    reg imm;
+    reg f_c;
+    reg s_mem_r_en;
+    reg s_mem_w_en;
+
+    reg [ARCH-1:0] v_rm;
 
     arm32_decoder dec (
         .ins(ins),
-        .flags(registers[16][31:28]),
+        .flags(flags),
+        .imm12(imm12),
+        .s(s),
         .i(imm),
         .rm(rm),
         .rn(rn),
         .f_c(f_c),
-        .s_mem(s_mem),
-        .s_alu(s_alu)
+        .r_mem(r_mem),
+        .s_alu(s_alu),
+        .s_mem_r_en(s_mem_r_en),
+        .s_mem_w_en(s_mem_w_en)
     );
 
     // *** expand imm12 to imm32 ***
-    wire [11:0] imm12;
-    wire [31:0] imm32;
+    wire [ARCH-1:0] imm32 = 32'b0;
 
-    exp_to_32b_value e (
-        .rm(registers[rm]),
-        .imm12(imm12),
-        .i(imm),
-        .s(s),
-        .res(imm32)
-    );
+    //exp_to_32b_value e (
+    //    .rm(v_rm),
+    //    .imm12(imm12),
+    //    .i(imm),
+    //    .s(s),
+    //    .res(imm32)
+    //);
 
     // *** ALU ***
-    reg [ARCH-1:0] alu_result;
+    reg [ARCH-1:0] alu_res;
     reg [3:0] alu_flags;
 
     alu a (
@@ -368,34 +385,52 @@ module processor
         .x(registers[rn]),
         .y(imm32),
         .cin(f_c),
-        .res(alu_result),
+        .res(alu_res),
         .flags(alu_flags)
     );
+
+    wire [ARCH-1:0] w_addr_0 = { alu_res[31:2], 2'b00 } - 32'd1024;
+    wire [ARCH-1:0] w_addr_1 = {w_addr_0[ARCH-1:1], 1'b1};
+    wire [ARCH-1:0] w_addr_2 = {w_addr_0[ARCH-1:2], 2'b10};
+    wire [ARCH-1:0] w_addr_3 = {w_addr_0[ARCH-1:2], 2'b11};
 
     always @(posedge clk) begin
         step <= step << 1;
         if (!reset_n) begin 
             pc <= 0;
-            for (integer i=0; i<ARCH; i=i+1) registers[i] <= 0;
+            for (integer i=0; i<ARCH; i=i+1) registers[i] <= 32'b0;
+            flags <= 4'b0;
             trap <= 1'b0;
             step <= 1'b1;
         end
 
         ins <= r.mem[pc];
 
+        // *** memory access ***
+        if (step[5] == 1'b1) begin
+            if(s_mem_w_en == 1'b1) begin
+                r.mem[w_addr_3] <= registers[r_mem][7:0];
+                r.mem[w_addr_2] <= registers[r_mem][15:8];
+                r.mem[w_addr_1] <= registers[r_mem][23:16];
+                r.mem[w_addr_0] <= registers[r_mem][ARCH-1:24];
+            end
+        end
+
+        // *** write back ***
         if (step[6] == 1'b1) begin
             pc <= pc + 1;
             step <= 1'b1;
+            v_wb <= s_mem_r_en ? r_mem : alu_res;
 
             $display("\n");
             $display("ins: %h", ins, ", pc: %h", pc);
-            //$display("%b", cond, " %b", ops, " %b", s, " %b", rs, " %b", rd, " %b", imm12);
 
-            //$display("r00: %h", registers[0], ",  r01: %h", registers[1], ",  r02: %h", registers[2], ",  r03: %h", registers[3], ",  r04: %h", registers[4]);
-            //$display("r05: %h", registers[5], ",  r06: %h", registers[6], ",  r07: %h", registers[7], ",  r08: %h", registers[8], ",  r09: %h", registers[9]);
-            //$display("r10: %h", registers[10], ",   fp: %h", registers[11], ",   ip: %h", registers[12], ",   sp: %h", registers[13], ",   lr: %h", registers[14]);
-            //$display(" pc: %h", registers[15], ", cpsr: %h", registers[16]);
+            $display("r00: %h", registers[0], ",  r01: %h", registers[1], ",  r02: %h", registers[2], ",  r03: %h", registers[3], ",  r04: %h", registers[4]);
+            $display("r05: %h", registers[5], ",  r06: %h", registers[6], ",  r07: %h", registers[7], ",  r08: %h", registers[8], ",  r09: %h", registers[9]);
+            $display("r10: %h", registers[10], ",   fp: %h", registers[11], ",   ip: %h", registers[12], ",   sp: %h", registers[13], ",   lr: %h", registers[14]);
+            $display(" pc: %h", registers[15], ", cpsr: %h", registers[16]);
 
         end
+        $display("%b", step);
     end
 endmodule
