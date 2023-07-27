@@ -47,8 +47,10 @@ module arm32_decoder
     input wire [N-1:0] ins,
     input wire [3:0]   flags,
     output reg         i,
+    output reg         f_c,
     output reg [3:0]   rm,
-    output reg [3:0]   rgs,
+    output reg [3:0]   rn,
+    output reg [3:0]   s_mem,
     output reg [3:0]   s_alu 
 );
 
@@ -68,7 +70,6 @@ module arm32_decoder
     wire [1:0] ins_t = ins[27:26];
     wire [3:0] opc = ins[24:21];
     wire s = ins[20];
-    wire [3:0] rn = ins[19:16];
     wire [3:0] rd = ins[15:12];
     wire [11:0] imm12 = ins[11:0];
     wire [23:0] imm24 = ins[23:0];
@@ -91,12 +92,14 @@ module arm32_decoder
     );
 
     assign rm = ins[3:0];
+    assign rn = ins[19:16];
     assign i = ins[25];
+    assign f_c = flags[2];
     assign s_alu = s_c;
     assign s_mux = ~cc_res | 1'b0; 
     assign mux_in = {s_mem_r_en, s_mem_w_en, s_wb_en, s_s, s_br, s_imm, s_c};
     assign {s_mem_r_en, s_mem_w_en, s_wb_en, s_s, s_br, s_imm, s_c} = s_mux ? 10'b0: mux_in;
-    assign rgs = s_mem_w_en ? rd : rm;
+    assign s_mem = s_mem_w_en ? rd : rm;
 
 endmodule
 
@@ -326,31 +329,23 @@ module processor
     );
 
     // *** decode ***
-    wire [3:0] flags = 4'b0000;
     wire [3:0] rm;
+    wire [3:0] rn;
     wire [3:0] s_alu;
-    wire [3:0] mem_reg;
+    wire [3:0] s_mem;
     wire imm;
+    wire f_c;
 
     arm32_decoder dec (
         .ins(ins),
-        .flags(flags),
+        .flags(registers[16][31:28]),
         .i(imm),
         .rm(rm),
-        .rgs(mem_reg),
+        .rn(rn),
+        .f_c(f_c),
+        .s_mem(s_mem),
         .s_alu(s_alu)
     );
-
-    //wire op1 = ins[4];
-    //wire [3:0] rd = ins[15:12];
-    //wire [3:0] rt = ins[15:12];
-    //wire [3:0] rn = ins[19:16];
-    //wire s = ins[20];
-    //wire p = ins[24];
-    //wire u = ins[23];
-    //wire w = ins[21];
-    //wire [6:0] ops = ins[27:21];
-    //wire [3:0] cond = ins[31:28];
 
     // *** expand imm12 to imm32 ***
     wire [11:0] imm12;
@@ -366,18 +361,16 @@ module processor
 
     // *** ALU ***
     reg [ARCH-1:0] alu_result;
-    reg [ARCH-1:0] alu_left;
-    reg [ARCH-1:0] alu_right;
-    reg alu_neg;
+    reg [3:0] alu_flags;
 
-    //alu #(.N(ARCH)) a (
-    //    .ops(s_alu),
-    //    .x(registers[rn]),
-    //    .y(imm32),
-    //    .cin(),
-    //    .res(),
-    //    .flags()
-    //);
+    alu a (
+        .ops(s_alu),
+        .x(registers[rn]),
+        .y(imm32),
+        .cin(f_c),
+        .res(alu_result),
+        .flags(alu_flags)
+    );
 
     always @(posedge clk) begin
         step <= step << 1;
