@@ -56,14 +56,19 @@ class OPCODE(Enum):
     """ARM 32 bit opcodes."""
 
     ADD = "add"  # Addition
+    ADDS = "adds"  # Addition signed
     SUB = "sub"  # Subtraction
+    SUBS = "subs"  # Subtraction signed
     MUL = "mul"  # Multiplication
+    MULS = "muls"  # Multiplication signed
     STR = "str"  # Store
     STM = "stm"  # Store Multiple
     LDR = "ldr"  # Load
     LDM = "ldm"  # Load Multiple
     MOV = "mov"  # Move data
+    MOVS = "movs"  # Move data signed
     MVN = "mvn"  # Move data and negate
+    MVNS = "mvns"  # Move data and negate signed
     POP = "pop"  # Pop off Stack
     PUSH = "push"  # Push on Stack
     B = "b"  # Branch
@@ -71,12 +76,15 @@ class OPCODE(Enum):
     BX = "bx"  # Branch and eXchange
     CMP = "cmp"  # Compare
     EOR = "eor"  # Bitwise XOR
+    EORS = "eors"  # Bitwise XOR signed
     LSL = "lsl"  # Logical Shift Left
     LSR = "lsr"  # Logical Shift Right
     ASR = "asr"  # Arithmetic Shift Right
     ROR = "ror"  # Rotate Right
     AND = "and"  # Bitwise AND
+    ANDS = "and"  # Bitwise AND signed
     ORR = "orr"  # Bitwise OR
+    ORRS = "orr"  # Bitwise OR signed
     SWI = "swi"  # System Call
     SVC = "svc"  # System Call
 
@@ -204,11 +212,13 @@ def asm32(tokens) -> list[int]:
     ins = []
     for idx, t in enumerate(tokens):
         if t[0] == Program.INSTRUCTION:
+            print(conds)
             inn = split_words(t[1].pop(0), conds)
             cond = (
                 CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
             )
             insb = t[1]
+            print(inn)
             if wf := any(filter(lambda x: x in ["[", "]"], insb)):
                 if insb.index("]") - insb.index("[") <= 2:
                     wf = False
@@ -229,13 +239,14 @@ def asm32(tokens) -> list[int]:
                 # TODO: Distinguish between <shift> and <label>
                 label = insb[0] if len(insb) else None
 
-            if inn[0] == OPCODE.ADD.value:
+            if inn[0] == OPCODE.ADD.value or inn[0] == OPCODE.ADDS.value:
+                s_bit = 1 if inn[0] == OPCODE.ADDS.value else 0
                 rn = 0xF if rs[1] == "pc" else REGISTERS[rs[1]].value
                 if len(rs) == 2:
-                    s_bit, op = 0, 2
+                    op = 2
                     imm = abs(int(const))
                 elif len(rs) == 3:
-                    s_bit, op = 0, 0
+                    op = 0
                     imm = REGISTERS[rs[2]].value
                 elif len(rs) == 4:
                     pass
@@ -250,13 +261,14 @@ def asm32(tokens) -> list[int]:
                     + (op << 24)
                     + (cond << 28)
                 )
-            elif inn[0] == OPCODE.SUB.value:
+            elif inn[0] == OPCODE.SUB.value or inn[0] == OPCODE.SUBS.value:
+                s_bit = 1 if inn[0] == OPCODE.SUBS.value else 0
                 rn = 0xF if rs[1] == "pc" else REGISTERS[rs[1]].value
                 if len(rs) == 2:
-                    s_bit, op = 0, 2
+                    op = 2
                     imm12 = abs(int(const))
                 elif len(rs) == 3:
-                    s_bit, op = 0, 0
+                    op = 0
                     imm12 = REGISTERS[rs[2]].value
                 elif len(rs) == 4:
                     pass
@@ -329,8 +341,8 @@ def asm32(tokens) -> list[int]:
                     + (op << 25)
                     + (cond << 28)
                 )
-            elif inn[0] == OPCODE.MOV.value:
-                s_bit = 0
+            elif inn[0] == OPCODE.MOV.value or inn[0] == OPCODE.MOVS.value:
+                s_bit = 1 if inn[0] == OPCODE.MOVS.value else 0
                 if len(rs) == 1:
                     imm = abs(int(const))
                     op = 7
@@ -402,7 +414,7 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.MUL.value or inn[0] == OPCODE.MULS.value:
-                s_bit = 0 if inn[0] == OPCODE.MUL.value else 1
+                s_bit = 1 if inn[0] == OPCODE.MULS.value else 0
                 ins.append(
                     REGISTERS[rs[1]].value
                     + (9 << 4)
@@ -414,7 +426,7 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.MVN.value or inn[0] == OPCODE.MVNS.value:
-                s_bit = 0 if inn[0] == OPCODE.MVN.value else 1
+                s_bit = 1 if inn[0] == OPCODE.MVNS.value else 0
                 if len(rs) == 1:
                     imm = abs(int(const))
                     op = 0x1F
@@ -434,7 +446,7 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.EOR.value or inn[0] == OPCODE.EORS.value:
-                s_bit = 0 if inn[0] == OPCODE.EOR.value else 1
+                s_bit = 1 if inn[0] == OPCODE.EORS.value else 0
                 if len(rs) == 2:
                     imm = abs(int(const))
                     op = 0x11
@@ -454,7 +466,7 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.AND.value or inn[0] == OPCODE.ANDS.value:
-                s_bit = 0 if inn[0] == OPCODE.AND.value else 1
+                s_bit = 1 if inn[0] == OPCODE.ANDS.value else 0
                 if len(rs) == 2:
                     imm = abs(int(const))
                     op = 0x10
@@ -474,7 +486,7 @@ def asm32(tokens) -> list[int]:
                     + (cond << 28)
                 )
             elif inn[0] == OPCODE.ORR.value or inn[0] == OPCODE.ORRS.value:
-                s_bit = 0 if inn[0] == OPCODE.ORR.value else 1
+                s_bit = 1 if inn[0] == OPCODE.ORRS.value else 0
                 if len(rs) == 2:
                     imm = abs(int(const))
                     op = 0x1C

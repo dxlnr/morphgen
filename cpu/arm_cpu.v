@@ -3,11 +3,12 @@
 module exp_to_32b_value
     #(parameter N = 32
     )(
-    input wire [N-1:0]  rm,
+    input clk,
+    input wire [N-1:0] v_rm,
     input wire [11:0]  imm12,
-    input wire i,
-    input wire s,
-    output reg [31:0] res
+    input wire         i,
+    input wire         s,
+    output reg [31:0]  res
 );
 
     reg [31:0] imm32;
@@ -17,34 +18,33 @@ module exp_to_32b_value
     wire [3:0] rotate_imm = imm12[11:8];
     wire [1:0] shift = imm12[6:5];
     wire [7:0] imm8 = imm12[7:0];
- 
+
+    // always @* begin
+    //     imm32 <= {24'b0, imm8};
+
+    //     for(integer k = 0; k < rotate_imm; k = k + 1) begin
+    //         imm32 <= {imm32[1:0], imm32[31:2]};
+    //     end 
+
+    //     r_rotate_imm <= v_rm;
+
+    //     for(integer k = 0; k <= imm12[11:7]; k = k + 1) begin
+    //         r_rotate_imm <= {r_rotate_imm[0], r_rotate_imm[31:0]};
+    //     end
+    // end
+
     assign res = s == 1'b1  ? { {20{imm12[11]}}, imm12} : 
         i == 1'b1           ? imm32 : 
-        shift == 2'b00      ? rm <<  {1'b0, shift_imm} :
-        shift == 2'b01      ? rm >>  {1'b0, shift_imm} :
-        shift == 2'b10      ? rm >>> {1'b0, shift_imm} :
+        shift == 2'b00      ? v_rm <<  {1'b0, shift_imm} :
+        shift == 2'b01      ? v_rm >>  {1'b0, shift_imm} :
+        shift == 2'b10      ? v_rm >>> {1'b0, shift_imm} :
         r_rotate_imm; 
 
-    integer k = 0;
-    always @* begin
-        imm32 <= {24'b0, imm8};
-
-        for(integer k = 0; k < rotate_imm; k = k + 1) begin
-            imm32 <= {imm32[1:0], imm32[31:2]};
-        end 
-
-        r_rotate_imm <= rm;
-
-        for(integer k = 0; k <= imm12[11:7]; k = k + 1) begin
-            r_rotate_imm <= {r_rotate_imm[0], r_rotate_imm[31:0]};
-        end
-    end
 endmodule
 
 module arm32_decoder
     #(parameter N = 32
     )(
-    input wire [N-1:0] registers [0:16],
     input wire [N-1:0] ins,
     input wire [3:0]   flags,
     output reg [11:0]  imm12,
@@ -348,8 +348,6 @@ module processor
     reg s_mem_r_en;
     reg s_mem_w_en;
 
-    reg [ARCH-1:0] v_rm;
-
     arm32_decoder dec (
         .ins(ins),
         .flags(flags),
@@ -366,15 +364,16 @@ module processor
     );
 
     // *** expand imm12 to imm32 ***
-    wire [ARCH-1:0] imm32 = 32'b0;
+    reg [ARCH-1:0] v_rm;
+    reg [ARCH-1:0] imm32;
 
-    //exp_to_32b_value e (
-    //    .rm(v_rm),
-    //    .imm12(imm12),
-    //    .i(imm),
-    //    .s(s),
-    //    .res(imm32)
-    //);
+    exp_to_32b_value e (
+        .v_rm(v_rm),
+        .imm12(imm12),
+        .i(imm),
+        .s(s),
+        .res(imm32)
+    );
 
     // *** ALU ***
     reg [ARCH-1:0] alu_res;
@@ -390,9 +389,9 @@ module processor
     );
 
     wire [ARCH-1:0] w_addr_0 = { alu_res[31:2], 2'b00 } - 32'd1024;
-    wire [ARCH-1:0] w_addr_1 = {w_addr_0[ARCH-1:1], 1'b1};
-    wire [ARCH-1:0] w_addr_2 = {w_addr_0[ARCH-1:2], 2'b10};
-    wire [ARCH-1:0] w_addr_3 = {w_addr_0[ARCH-1:2], 2'b11};
+    wire [ARCH-1:0] w_addr_1 = { w_addr_0[ARCH-1:1], 1'b1 };
+    wire [ARCH-1:0] w_addr_2 = { w_addr_0[ARCH-1:2], 2'b10 };
+    wire [ARCH-1:0] w_addr_3 = { w_addr_0[ARCH-1:2], 2'b11 };
 
     always @(posedge clk) begin
         step <= step << 1;
@@ -405,6 +404,8 @@ module processor
         end
 
         ins <= r.mem[pc];
+
+        $display("imm32 = %b", imm32);
 
         // *** memory access ***
         if (step[5] == 1'b1) begin
@@ -424,6 +425,7 @@ module processor
 
             $display("\n");
             $display("ins: %h", ins, ", pc: %h", pc);
+            $display("cond %b", ins[31:28], ", ops %b", ins[27:21], ", s %b", ins[20], ", rn %b", ins[19:16], ", rd %b", ins[15:12], ", imm12 %b", ins[11:0]);
 
             $display("r00: %h", registers[0], ",  r01: %h", registers[1], ",  r02: %h", registers[2], ",  r03: %h", registers[3], ",  r04: %h", registers[4]);
             $display("r05: %h", registers[5], ",  r06: %h", registers[6], ",  r07: %h", registers[7], ",  r08: %h", registers[8], ",  r09: %h", registers[9]);

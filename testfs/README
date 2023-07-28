@@ -23,9 +23,13 @@ ARM
     $ qemu-arm -L /usr/arm-linux-gnueabihf ./fib
 
 
-    Get the register content at end of program
-    $ arm-linux-gnueabihf-gcc -o sub testfs/sub.c
+    Get the register content at end of program (GDB)
+    $ arm-linux-gnueabihf-gcc -ggdb3 -o sub testfs/subtract.c # compile with debug info
     $ gdb-multiarch ./sub  # start gdb but cross-compiled
+    $ qemu-arm -L /usr/arm-linux-gnueabihf -g 1234 ./sub # (1) start qemu with gdb server 
+
+    $ gdb-multiarch -q --nh -ex 'set architecture arm' -ex 'file sub' -ex 'target remote localhost:1234' -ex 'layout split' -ex 'layout regs' (2) start gdb
+
     $ (gdb) run
     $ (gdb) info registers
 

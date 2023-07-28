@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.abspath(Path(__file__).parent.parent))
 
 from arm_asm import asm32, parser
 
-TESTFS = ["testfs/arm32_subtract.s", "testfs/arm32_prime.s", "testfs/arm32_fib.s"]
-TARGETFS = ["test/subtract.hex", "test/prime.hex", "test/fib.hex"]
+TESTFS = ["testfs/arm32_sub_hf.s", "testfs/arm32_subtract.s", "testfs/arm32_prime.s", "testfs/arm32_fib.s"]
+TARGETFS = ["test/subhf.hex", "test/subtract.hex", "test/prime.hex", "test/fib.hex"]
 
 
 class TestARMAssembler(unittest.TestCase):

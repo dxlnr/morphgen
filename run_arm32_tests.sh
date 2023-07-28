@@ -8,6 +8,14 @@ hexdump -e '"%08x " "\n"' subtract.bin
 # hexdump -e '"%08x " "\n"' subtract.bin > subtract.hex
 rm subtract.o subtract.bin
 
+echo ".o : subtract.c hf"
+echo ""
+arm-linux-gnueabihf-gcc -c -o sub.o testfs/subtract.c
+arm-linux-gnueabihf-objcopy -S -O binary sub.o sub.bin
+# hexdump -e '"%08x " "\n"' sub.bin 
+hexdump -e '"%08x " "\n"' sub.bin > subhf.hex
+rm sub.o sub.bin
+
 echo ""
 echo ".o : prime.c"
 echo ""
