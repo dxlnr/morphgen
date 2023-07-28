@@ -113,10 +113,12 @@ def dump_to_hex(ins: list[int], fn: str) -> None:
 
 def split_words(str_in: str, sl: list[str]) -> list[str]:
     """Reads in a string and splits it into words based on a list of symbols."""
+    inswords = ["movs"]
     for w in sl:
-        m = list(filter(None, re.split(f"({str(re.escape(w))})", str_in)))
-        if len(m) > 1:
-            return m
+        if str_in not in inswords:
+            m = list(filter(None, re.split(f"({str(re.escape(w))})", str_in)))
+            if len(m) > 1:
+                return m
     return [str_in]
 
 
@@ -211,8 +213,8 @@ def asm32(tokens) -> list[int]:
 
     ins = []
     for idx, t in enumerate(tokens):
+        print(t)
         if t[0] == Program.INSTRUCTION:
-            print(conds)
             inn = split_words(t[1].pop(0), conds)
             cond = (
                 CONDITION[inn[1].upper()].value if len(inn) > 1 else CONDITION.AL.value
