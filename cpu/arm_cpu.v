@@ -3,11 +3,11 @@
 module exp_to_32b_value
     #(parameter N = 32
     )(
-    input clk,
-    input wire [N-1:0] i_v_rm,
-    input wire [11:0]  i_imm12,
-    input wire         i_s_imm,
-    input wire         i_s_mem,
+    input              clk,
+    input [N-1:0]      i_v_rm,
+    input [11:0]       i_imm12,
+    input              i_s_imm,
+    input              i_s_mem,
     output reg [31:0]  o_res
 );
     reg [N-1:0] imm32;
