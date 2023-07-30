@@ -370,6 +370,92 @@ module control_unit
     end
 endmodule
 
+module register_bank 
+    #(parameter N = 32
+    )(
+    input wire clk,
+    input wire [3:0] i_r_addr1,
+    input wire [3:0] i_r_addr2,
+    input wire [3:0] i_w_addr,
+    input wire [N-1:0] i_w_data,
+    input wire i_w_en,
+    output reg [N-1:0] o_v1,
+    output reg [N-1:0] o_v2
+);
+
+    reg [N-1:0] registers [15:0];
+    reg [N-1:0] cspr; 
+    reg [N-1:0] sspr;
+
+    initial begin
+        registers[0] = 32'b0;
+        registers[1] = 32'b0;
+        registers[2] = 32'b0;
+        registers[3] = 32'b0;
+        registers[4] = 32'b0;
+        registers[5] = 32'b0;
+        registers[6] = 32'b0;
+        registers[7] = 32'b0;
+        registers[8] = 32'b0;
+        registers[9] = 32'b0;
+        registers[10] = 32'b0;
+        registers[11] = 32'b0;
+        registers[12] = 32'b0;
+        registers[13] = 32'b0; // stack pointer
+        registers[14] = 32'b0; // link register
+        registers[15] = 32'b0; // program counter
+    end
+
+    always @(i_r_addr1) begin
+        case (i_r_addr1)
+            4'b0000: o_v1 = registers[0];
+            4'b0001: o_v1 = registers[1];
+            4'b0010: o_v1 = registers[2];
+            4'b0011: o_v1 = registers[3];
+            4'b0100: o_v1 = registers[4];
+            4'b0101: o_v1 = registers[5];
+            4'b0110: o_v1 = registers[6];
+            4'b0111: o_v1 = registers[7];
+            4'b1000: o_v1 = registers[8];
+            4'b1001: o_v1 = registers[9];
+            4'b1010: o_v1 = registers[10];
+            4'b1011: o_v1 = registers[11];
+            4'b1100: o_v1 = registers[12];
+            4'b1101: o_v1 = registers[13];
+            4'b1110: o_v1 = registers[14];
+            4'b1111: o_v1 = registers[15];
+        endcase
+    end
+
+
+    always @(i_r_addr2) begin
+        case (i_r_addr2)
+            4'b0000: o_v2 = registers[0];
+            4'b0001: o_v2 = registers[1];
+            4'b0010: o_v2 = registers[2];
+            4'b0011: o_v2 = registers[3];
+            4'b0100: o_v2 = registers[4];
+            4'b0101: o_v2 = registers[5];
+            4'b0110: o_v2 = registers[6];
+            4'b0111: o_v2 = registers[7];
+            4'b1000: o_v2 = registers[8];
+            4'b1001: o_v2 = registers[9];
+            4'b1010: o_v2 = registers[10];
+            4'b1011: o_v2 = registers[11];
+            4'b1100: o_v2 = registers[12];
+            4'b1101: o_v2 = registers[13];
+            4'b1110: o_v2 = registers[14];
+            4'b1111: o_v2 = registers[15];
+        endcase
+    end
+
+    always @(negedge clk) begin
+        if (i_w_en == 1) begin
+            registers[i_w_addr] = i_w_data;
+        end
+    end
+endmodule
+
 module processor
     #(parameter ARCH = 32,
       parameter RAM_SIZE = 1024 

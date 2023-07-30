@@ -71,14 +71,14 @@ def wmem(addr, data):
     global memory
     addr -= 0x80000000
     assert addr >= 0 and addr < len(memory)
-    memory = memory[:addr] + data + memory[addr + len(data):]
+    memory = memory[:addr] + data + memory[addr + len(data) :]
 
 
 def fetch32(addr):
     addr -= 0x80000000
     if addr < 0 or addr >= len(memory):
         raise Exception("read out of memory: 0x%x" % addr)
-    return struct.unpack("I", memory[addr: addr + 4])[0]
+    return struct.unpack("I", memory[addr : addr + 4])[0]
 
 
 def imm_j(ins: int) -> int:
@@ -346,7 +346,7 @@ if __name__ == "__main__":
         # Reset memory and registers.
         reset()
         # Reading the elf program header to memory.
-        memory = elf_reader(memory, x)
+        memory = elf_reader(memory, x, True)
 
         registers[PC] = 0x80000000
         inscnt = 0

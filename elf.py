@@ -18,7 +18,7 @@ def write_to_mem(memory, data, addr):
     return memory
 
 
-def dump_to_file(x, mem, dirs: str = "test_riskv/%s"):
+def dump_to_file(x, mem, dirs: str = "test-riscv/%s"):
     """Dumps instructions to file."""
     with open(dirs % x.split("/")[-1], "wb") as d:
         d.write(
@@ -28,7 +28,7 @@ def dump_to_file(x, mem, dirs: str = "test_riskv/%s"):
         )
 
 
-def elf_reader(memory, file: str, dump_to_file: bool = False):
+def elf_reader(memory, file: str, to_file: bool = False):
     """Reads in an elf file format and returns opscode."""
     if not file.endswith(".dump"):
         with open(file, "rb") as f:
@@ -36,6 +36,6 @@ def elf_reader(memory, file: str, dump_to_file: bool = False):
             for s in elf.iter_segments(type="PT_LOAD"):
                 memory = write_to_mem(memory, s.data(), s.header.p_paddr)
 
-            if dump_to_file:
-                dump_to_file(f, memory) 
+            if to_file:
+                dump_to_file(file, memory)
     return memory
