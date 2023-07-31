@@ -32,7 +32,7 @@ module exp_to_32b_value
     end
 
     assign o_res = i_s_mem == 1'b1  ? { {20{i_imm12[11]}}, i_imm12} : 
-        i_s_imm == 1'b1             ? imm32 : 
+        i_s_imm == 1'b1             ? r_imm32 : 
         w_shift == 2'b00            ? i_v_rm <<  {1'b0, w_shift_imm} :
         w_shift == 2'b01            ? i_v_rm >>  {1'b0, w_shift_imm} :
         w_shift == 2'b10            ? i_v_rm >>> {1'b0, w_shift_imm} :
@@ -114,7 +114,7 @@ module arm32_decoder
     assign o_wb_en      = w_s_mux ? 1'b0 : w_wb_en;
     assign o_br         = w_s_mux ? 1'b0 : w_br;
     assign o_ld_st      = w_s_mux ? 1'b0 : w_ld_st;
-    assign o_s_imm      = w_s_mux ? 1'b0 : w_s_imm;
+    assign o_s_imm      = w_s_mux ? 1'b0 : w_imm;
     assign o_alu_c      = w_s_mux ? 4'b0 : w_alu_c;
     assign w_r_s2 = w_mem_w_en ? w_rd : w_rm;
 
@@ -270,10 +270,8 @@ module execution_unit
     input wire [3:0]    i_ops,
     input wire [11:0]   i_imm12,
     input wire [23:0]   i_imm24,
-    input wire [N-1:0]  i_v_rm,
     input wire [N-1:0]  i_v_rn,
-    input wire [N-1:0]  i_v_mem_wb,
-    input wire [N-1:0]  i_v_wb,
+    input wire [N-1:0]  i_v_rm,
     output reg          o_s_mem_r_en,
     output reg          o_s_mem_w_en,
     output reg          o_s_wb_en,
@@ -387,10 +385,9 @@ module control_unit
             2'b10: begin // Branch Instruction
                 o_s_br <= 1'b1;
             end
-            2'b11: begin // Co Processor Instruction
+            2'b11: begin
             end
         endcase
-        $display("i_ops: %b", i_ops, " i_ins_t: %b", i_ins_t, " i_ld_st: %b", i_ld_st, " o_s_c: %b", o_s_c);
     end
 endmodule
 
@@ -408,7 +405,6 @@ module register_bank
     output reg [N-1:0] o_vs2
 );
     reg [N-1:0] regs [15:0];
-    reg [N-1:0] cspr; 
 
     assign o_vs1 = regs[i_r_s1];
     assign o_vs2 = regs[i_r_s2];
@@ -447,7 +443,7 @@ module processor
         .clk(clk)
     );
 
-    reg [3:0] nzcv = 4'b0000; // todo
+    wire [3:0] w_de_nzcv = 4'b0000; // todo
 
     // *** decode ***
     wire            w_de_reset_n;
@@ -466,12 +462,13 @@ module processor
     wire            w_wb_en;        // Write back enable
     wire [ARCH-1:0] w_v_rn;         // 1st operand (value)
     wire [ARCH-1:0] w_v_s2;         // 2st operand (value)
+    wire [ARCH-1:0] w_v_rd;         // 2st operand (value)
 
     arm32_decoder dec (
         .clk(clk),
         .i_reset_n(w_de_reset_n),
         .i_ins(ins),
-        .i_nzcv(nzcv),
+        .i_nzcv(w_de_nzcv),
         .o_imm12(w_imm12),
         .o_imm24(w_imm24),
         .o_alu_c(w_alu_c),
@@ -490,11 +487,14 @@ module processor
     );
 
     // *** decode ***
-    // wire [ARCH-1:0] w_v_rm;
-    // wire [ARCH-1:0] w_v_rn;
-    wire [ARCH-1:0] w_alu_res;
-    wire [ARCH-1:0] w_br_addr;
-    
+    wire [3:0]      w_nzcv;
+    wire [ARCH-1:0] w_v_rm;
+    wire [ARCH-1:0] w_alu_res;      // ALU result (value)
+    wire [ARCH-1:0] w_br_addr; 
+    wire            w_eu_mem_r_en;  // Memory read enable
+    wire            w_eu_mem_w_en;  // Memory write enable
+    wire            w_eu_wb_en;     // Write back enable
+
     execution_unit eu (
         .clk(clk), 
         .i_pc(pc),
@@ -508,17 +508,13 @@ module processor
         .i_imm24(w_imm24),
         .i_v_rn(w_v_rn),
         .i_v_rm(w_v_rm),
-        .i_v_mem_wb(w_rd),
-        .i_v_wb(v_wb),
-        .o_s_mem_r_en(s_mem_r_en),
-        .o_s_mem_w_en(s_mem_w_en),
-        .o_s_wb_en(s_wb_en),
+        .o_s_mem_r_en(w_eu_mem_r_en),
+        .o_s_mem_w_en(w_eu_mem_w_en),
+        .o_s_wb_en(w_eu_wb_en),
         .o_alu_res(w_alu_res),
-        .o_alu_nzcv(w_alu_nzcv),
+        .o_alu_nzcv(w_nzcv),
         .o_b_addr(w_br_addr)
     );
-
-    // wire [ARCH-1:0] w_addr_0 = { { alu_res[31:2], 2'b00 }}; 
 
     always @(posedge clk) begin
         step <= step << 1;
@@ -538,15 +534,18 @@ module processor
         //     end
         // end
 
-        // $display(" imm12: %b", w_imm12);
-        //
         // *** write back ***
         if (step[6] == 1'b1) begin
             pc <= pc + 1;
             step <= 1'b1;
-            // v_wb <= s_mem_r_en ? r_mem : alu_res;
 
-            $display(" alu control: %b", w_alu_c);
+            if (w_eu_wb_en == 1'b1) begin
+                registers[w_rd] <= w_alu_res;
+            end
+
+            $display("wb_en: %b", w_eu_wb_en, ", w_eu_mem_r_en: %b", w_eu_mem_r_en, ", w_eu_mem_w_en: %b", w_eu_mem_w_en);
+            $display("alu control: %b", w_alu_c);
+            $display("alu result: %b", w_alu_res);
 
             $display("ins: %h", ins, ", pc: %h", pc);
             $display("cond %b", ins[31:28], ", ops %b", ins[27:21], ", s %b", ins[20], ", rn %b", ins[19:16], ", rd %b", ins[15:12], ", imm12 %b", ins[11:0]);
