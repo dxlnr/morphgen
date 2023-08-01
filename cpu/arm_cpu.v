@@ -535,12 +535,12 @@ module memory_stage
     input wire         i_s_wb_en,
     input wire [N-1:0] i_alu_res,
     input wire [N-1:0] i_vs2,
-    input wire [N-1:0] i_wb_addr,
+    input wire [3:0]   i_wb_addr,
     output reg         o_s_wb_en,
     output reg         o_s_mem_r_en,
     output reg         o_s_mem_w_en,
     output reg [N-1:0] o_alu_res,       // alu result
-    output reg [N-1:0] o_wb_addr,       // write back address
+    output reg [3:0]   o_wb_addr,       // write back address (register)
     output reg [N-1:0] o_wb_data        // write back data from memory
     );
 
@@ -558,6 +558,25 @@ module memory_stage
         .i_mem_w_data(i_vs2),
         .o_mem_r_data(o_wb_data)
     );
+endmodule
+
+module wb_stage
+    #(parameter N = 32
+    )(
+    input wire         clk, 
+    input wire         i_s_mem_r_en,
+    input wire         i_s_wb_en,
+    input wire [N-1:0] i_alu_res,
+    input wire [N-1:0] i_wb_data,
+    input wire [3:0]   i_wb_addr,
+    output reg         o_s_wb_en,
+    output reg [N-1:0] o_wb_data,
+    output reg [3:0]   o_wb_addr
+);
+    assign o_s_wb_en = i_s_wb_en;
+    assign o_wb_addr = i_wb_addr;
+    assign o_wb_data = i_s_mem_r_en ? i_wb_data : i_alu_res;
+
 endmodule
 
 module forwarding_unit
@@ -608,7 +627,7 @@ module processor
     input wire reset_n,
     output reg trap
 );
-    reg [ARCH-1:0] registers [0:16];
+    reg [ARCH-1:0] registers [0:15];
     reg [ARCH-1:0] ins;
     reg [ARCH-1:0] pc;
     reg [6:0] step;
@@ -700,8 +719,8 @@ module processor
     wire            w_m_mem_r_en;
     wire            w_m_mem_w_en;
     wire            w_m_wb_en;
-    wire [ARCH-1:0] w_m_wb_addr;    // write back address
-    wire [3:0]      w_m_wb_data;    // write back data (value) read from memory
+    wire [3:0]      w_m_wb_addr;    // write back address
+    wire [ARCH-1:0] w_m_wb_data;    // write back data (value) read from memory
 
     memory_stage m (
         .clk(clk), 
@@ -720,6 +739,23 @@ module processor
         .o_wb_data(w_m_wb_data)
     );
 
+    // *** write back ***
+    wire            w_wb_wb_en;
+    wire [ARCH-1:0] w_wb_wb_data;
+    wire [3:0]      w_wb_wb_addr;
+
+    wb_stage wb (
+        .clk(clk), 
+        .i_s_mem_r_en(w_m_mem_r_en),
+        .i_s_wb_en(w_m_wb_en),
+        .i_alu_res(w_m_mem_res),
+        .i_wb_data(w_m_wb_data),
+        .i_wb_addr(w_m_wb_addr),
+        .o_s_wb_en(w_wb_wb_en),
+        .o_wb_data(w_wb_wb_data),
+        .o_wb_addr(w_wb_wb_addr)
+    );
+
     always @(posedge clk) begin
         step <= step << 1;
         if (!reset_n) begin 
@@ -731,23 +767,17 @@ module processor
 
         ins <= r.mem[pc];
 
-        // // *** memory access ***
-        // if (step[5] == 1'b1) begin
-        //     if(s_mem_w_en == 1'b1) begin
-        //         r.mem[w_addr_0] <= registers[r_mem];
-        //     end
-        // end
-
         // *** write back ***
         if (step[6] == 1'b1) begin
             pc <= pc + 1;
             step <= 1'b1;
 
-            if (w_eu_wb_en == 1'b1) begin
-                registers[w_rd] <= w_alu_res;
+            if (w_wb_wb_en == 1'b1) begin
+                $display("(wb) : addr %d, val : %b", w_wb_wb_addr, w_wb_wb_data);
+                registers[w_wb_wb_addr] <= w_wb_wb_data;
             end
 
-            $display("wb_en: %b", w_m_wb_en, ", w_mem_r_en: %b", w_m_mem_r_en, ", w_mem_w_en: %b", w_m_mem_w_en);
+            $display("wb_en: %b", w_wb_wb_en, ", w_mem_r_en: %b", w_m_mem_r_en, ", w_mem_w_en: %b", w_m_mem_w_en);
             $display("alu control: %b", w_alu_c);
             $display("alu result: %b", w_alu_res);
             $display("w_rd: %b %d", w_rd, w_rd);
@@ -758,7 +788,7 @@ module processor
             $display("r00: %h", registers[0], ",  r01: %h", registers[1], ",  r02: %h", registers[2], ",  r03: %h", registers[3], ",  r04: %h", registers[4]);
             $display("r05: %h", registers[5], ",  r06: %h", registers[6], ",  r07: %h", registers[7], ",  r08: %h", registers[8], ",  r09: %h", registers[9]);
             $display("r10: %h", registers[10], ",   fp: %h", registers[11], ",   ip: %h", registers[12], ",   sp: %h", registers[13], ",   lr: %h", registers[14]);
-            $display(" pc: %h", registers[15], ", cpsr: %h", registers[16]);
+            $display(" pc: %h", registers[15]);
 
             $display("\n");
         end
