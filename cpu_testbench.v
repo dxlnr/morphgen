@@ -24,7 +24,7 @@ module cpu_testbench #(parameter PERIOD = 10);
             $display($sformatf("  Expecting an argument %s", firmware), "ERROR");
             $finish;
         end
-        $readmemh(firmware, p.r.mem);
+        $readmemh(firmware, p.fs.im.mem);
     end 
 
     always #CLOCK_PERIOD_NS clk = ~clk;
@@ -39,7 +39,7 @@ module cpu_testbench #(parameter PERIOD = 10);
     end
 
     initial begin
-        #1500
+        #1100
         $display("\nfinished.");
         $finish;
     end
