@@ -486,7 +486,8 @@ module alu
         case (i_ops)
             4'b0001: o_res <= i_y;
             4'b1001: o_res <= ~i_y;
-            4'b0010: {c, o_res} <= i_x + i_y;
+            // 4'b0010: {c, o_res} <= i_x + i_y;
+            4'b0010: o_res <= i_x + i_y;
             4'b0011: {c, o_res} <= i_x + i_y + i_f_c;
             4'b0100: {c, o_res} <= i_x - i_y;
             4'b0101: {c, o_res} <= i_x - i_y - i_f_c;
@@ -567,6 +568,49 @@ module execution_unit
         .o_res(o_alu_res),
         .o_nzcv(o_alu_nzcv)
     );
+endmodule
+
+module execution_stage 
+    #(parameter N = 32
+    )(
+    input              clk,
+    input wire         i_reset_n,
+    input wire         i_flush, 
+    input wire         i_freeze, 
+    input wire         i_pc,
+    input wire         i_mem_r_en,
+    input wire         i_mem_w_en,
+    input wire         i_wb_en,
+    input wire [3:0]   i_wb_addr,
+    input wire [N-1:0] i_alu_res,
+    input wire [N-1:0] i_vs2,
+    output reg         o_pc,
+    output reg         o_mem_r_en,
+    output reg         o_mem_w_en,
+    output reg         o_wb_en,
+    output reg [3:0]   o_wb_addr,
+    output reg [N-1:0] o_alu_res,
+    output reg [N-1:0] o_vs2
+);
+    always @(posedge clk, posedge i_reset_n) begin
+        if (!i_reset_n || i_flush) begin
+            o_pc         <= 32'b0;
+            o_mem_r_en   <= 1'b0;
+            o_mem_w_en   <= 1'b0;
+            o_wb_en      <= 1'b0;
+            o_wb_addr    <= 4'b0; 
+            o_alu_res    <= 32'b0;
+            o_vs2        <= 32'b0;
+        end else begin
+            o_pc         <= i_pc;
+            o_mem_r_en   <= i_mem_r_en;
+            o_mem_w_en   <= i_mem_w_en;
+            o_wb_en      <= i_wb_en;
+            o_wb_addr    <= i_wb_addr;
+            o_alu_res    <= i_alu_res;
+            o_vs2        <= i_vs2;
+        end
+    end
 endmodule
 
 module memory_stage
@@ -678,7 +722,6 @@ module processor
     input wire reset_n,
     output reg trap
 );
-    reg [ARCH-1:0] registers [0:15];
     reg [ARCH-1:0] pc;
     reg [6:0] step;
 
@@ -714,7 +757,7 @@ module processor
     wire [ARCH-1:0] w_eu_pc;
     wire [3:0]      w_nzcv;
     wire [ARCH-1:0] w_v_rm;
-    wire [ARCH-1:0] w_eu_alu_res;      // ALU result (value)
+    wire [ARCH-1:0] w_eu_alu_res;   // ALU result (value)
     wire [ARCH-1:0] w_eu_vs2;       // 2nd operand (value) : Rm
     wire            w_eu_mem_r_en;  // Memory read enable
     wire            w_eu_mem_w_en;  // Memory write enable
@@ -853,6 +896,39 @@ module processor
         .o_br_addr(w_fs_br_addr)
     );
 
+    wire            w_es_reset_n = reset_n;
+    wire            w_es_flush;
+    wire            w_es_freeze;
+
+    wire [ARCH-1:0] w_es_pc;
+    wire            w_es_mem_r_en;
+    wire            w_es_mem_w_en;
+    wire            w_es_wb_en;
+    wire [3:0]      w_es_wb_addr;
+    wire [ARCH-1:0] w_es_alu_res;
+    wire [ARCH-1:0] w_es_vs2;
+
+    execution_stage es (
+        .clk(clk),
+        .i_reset_n(w_es_reset_n),
+        .i_flush(w_es_flush),
+        .i_freeze(w_es_freeze),
+        .i_pc(w_eu_pc),
+        .i_mem_r_en(w_eu_mem_r_en),
+        .i_mem_w_en(w_eu_mem_w_en),
+        .i_wb_en(w_eu_wb_en),
+        .i_wb_addr(w_eu_wb_addr),
+        .i_alu_res(w_eu_alu_res),
+        .i_vs2(w_eu_vs2),
+        .o_pc(w_es_pc),
+        .o_mem_r_en(w_es_mem_r_en),
+        .o_mem_w_en(w_es_mem_w_en),
+        .o_wb_en(w_es_wb_en),
+        .o_wb_addr(w_es_wb_addr),
+        .o_alu_res(w_es_alu_res),
+        .o_vs2(w_es_vs2)
+    );
+
     // *** (4) memory access ***
     memory_stage m (
         .clk(clk), 
@@ -892,7 +968,6 @@ module processor
         step <= step << 1;
         if (!reset_n) begin 
             pc <= 0;
-            for (integer i=0; i<ARCH; i=i+1) registers[i] <= 32'b0;
             trap <= 1'b0;
             step <= 1'b1;
         end
@@ -901,21 +976,6 @@ module processor
         if (step[6] == 1'b1) begin
             pc <= pc + 1;
             step <= 1'b1;
-
-            $display("(ins) : pc: %h", pc, " | ins: %h", w_fs_ins, " | cond %b", w_fs_ins[31:28], ", ops %b", w_fs_ins[27:21], ", s %b", w_fs_ins[20], ", rn %b", w_fs_ins[19:16], ", rd %b", w_fs_ins[15:12], ", imm12 %b", w_fs_ins[11:0]);
-            $display("(alu) : alu_c: %b", w_de_alu_c, " | alu result: %b", w_eu_alu_res);
-            $display("(de)  : w_de_v_rn: %b", w_de_v_rn);
-            $display("(s)   : wb_en: %b", w_wb_wb_en, " | w_mem_r_en: %b", w_m_mem_r_en, " | w_mem_w_en: %b", w_m_mem_w_en);
-            $display("(m)   : w_m_addr %d, mem_v : %b", w_wb_wb_addr, w_m_mem_res);
-            $display("(wb)  : w_wb_addr %d, wb_v : %b", w_wb_wb_addr, w_wb_wb_data);
-
-            // $display("r00: %b", de.rb.regs[0], ",  r01: %b");
-            // $display("r00: %h", de.rb.registers[0], ",  r01: %h", registers[1], ",  r02: %h", registers[2], ",  r03: %h", registers[3], ",  r04: %h", registers[4]);
-            // $display("r05: %h", registers[5], ",  r06: %h", registers[6], ",  r07: %h", registers[7], ",  r08: %h", registers[8], ",  r09: %h", registers[9]);
-            // $display("r10: %h", registers[10], ",   fp: %h", registers[11], ",   ip: %h", registers[12], ",   sp: %h", registers[13], ",   lr: %h", registers[14]);
-            // $display(" pc: %h", registers[15]);
-
-            $display("\n");
         end
     end
 endmodule

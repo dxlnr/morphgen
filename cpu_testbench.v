@@ -31,6 +31,16 @@ module cpu_testbench #(parameter PERIOD = 10);
 
     always @(posedge clk) begin
         reset_n <= 1;
+        $display("pc:%d -- ins:%h -- alu_c:%b alu_res:%b wb_data:%b -- wb:%b mem_r:%b mem_w:%b",
+            p.pc,
+            p.w_fs_ins,
+            p.w_de_alu_c,
+            p.w_eu_alu_res,
+            p.w_wb_wb_data,
+            p.w_wb_wb_en,
+            p.w_eu_mem_r_en,
+            p.w_eu_mem_w_en
+        );
     end
 
     always @(posedge trap) begin
