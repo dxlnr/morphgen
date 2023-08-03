@@ -224,8 +224,8 @@ module register_bank
     )(
     input wire         clk,
     input wire         i_reset_n,
-    input wire [3:0]   i_r_s1,
-    input wire [3:0]   i_r_s2,
+    input wire [3:0]   i_s1,
+    input wire [3:0]   i_s2,
     input wire [3:0]   i_wb_addr,
     input wire [N-1:0] i_wb_data,
     input wire         i_wb_en,
@@ -234,10 +234,10 @@ module register_bank
 );
     reg [N-1:0] regs [15:0];
 
-    assign o_vs1 = regs[i_r_s1];
-    assign o_vs2 = regs[i_r_s2];
+    assign o_vs1 = regs[i_s1];
+    assign o_vs2 = regs[i_s2];
 
-    always @(negedge clk, posedge i_reset_n) begin
+    always @(negedge clk) begin
         if(!i_reset_n) begin
             for (integer i=0; i<N; i=i+1) regs[i] <= 32'b0;
         end
@@ -273,12 +273,11 @@ module arm32_decoder
     output reg [N-1:0] o_vs2,           // 2nd operand (value)                 (3)
     output reg [3:0]   o_s1,            // 1st operand (reg address) : Rn
     output reg [3:0]   o_s2,            // 2nd operand (reg address) : Rm
-    output reg         o_ld_st,         // load/store bit
     output reg         o_br,            // branch taken 
     output reg         o_f_c,           // carry flag
     output reg         o_imm,           // immediate bit
-    output reg         o_s_mem_r_en,    // memory read enable used mem access  (4)
-    output reg         o_s_mem_w_en,    // memory write enable used mem access (4)
+    output reg         o_mem_r_en,      // memory read enable used mem access  (4)
+    output reg         o_mem_w_en,      // memory write enable used mem access (4)
     output reg         o_wb_en,         // write back enable used write back   (5) 
     output reg [3:0]   o_wb_addr        // destination (wb) register : Rd      (5)
 );
@@ -329,20 +328,19 @@ module arm32_decoder
     assign o_f_c        = i_nzcv[2];
     assign w_s_mux      = w_cond_res; 
     // assign w_s_mux      = ~w_cond_res | 1'b0; 
-    assign o_s_mem_r_en = w_s_mux ? 1'b0 : w_mem_r_en;
-    assign o_s_mem_w_en = w_s_mux ? 1'b0 : w_mem_w_en;
+    assign o_mem_r_en   = w_s_mux ? 1'b0 : w_mem_r_en;
+    assign o_mem_w_en   = w_s_mux ? 1'b0 : w_mem_w_en;
     assign o_wb_en      = w_s_mux ? 1'b0 : w_wb_en;
     assign o_br         = w_s_mux ? 1'b0 : w_br;
-    assign o_ld_st      = w_s_mux ? 1'b0 : w_ld_st;
     assign o_imm        = w_s_mux ? 1'b0 : w_imm;
     assign o_alu_c      = w_s_mux ? 4'b0 : w_alu_c;
-    assign w_r_s2 = w_mem_w_en ? w_rd : w_rm;
+    assign w_r_s2       = w_mem_w_en ? w_rd : w_rm;
 
     register_bank rb (
         .clk(clk),
         .i_reset_n(i_reset_n),
-        .i_r_s1(w_rn),
-        .i_r_s2(w_rm),
+        .i_s1(w_rn),
+        .i_s2(w_rm),
         .i_wb_addr(i_wb_addr),
         .i_wb_data(i_wb_data),
         .i_wb_en(i_wb_en),
@@ -359,9 +357,8 @@ module decoder_stage
     input wire         i_reset_n,
     input wire         i_flush,         // flush the pipe (branch predict gone wrong)
     input wire         i_freeze,        // freeze pipeline (potential inefficiency)
-    input wire         i_s_mem_r_en,
-    input wire         i_s_mem_w_en,
-    input wire         i_s_wb_en,
+    input wire         i_mem_r_en,
+    input wire         i_mem_w_en,
     input wire         i_imm,
     input wire         i_br,
     input wire [3:0]   i_alu_c,
@@ -369,6 +366,7 @@ module decoder_stage
     input wire [N-1:0] i_vs2,
     input wire [11:0]  i_imm12,
     input wire [23:0]  i_imm24,
+    input wire         i_wb_en,
     input wire [3:0]   i_wb_addr,
     input wire         i_ld_st,
     input wire         i_f_c,
@@ -381,14 +379,14 @@ module decoder_stage
     output reg [N-1:0] o_vs2,
     output reg [3:0]   o_s1, 
     output reg [3:0]   o_s2,
-    output reg [3:0]   o_wb_addr,
     output reg         o_ld_st,
     output reg         o_br,
     output reg         o_f_c,
     output reg         o_imm,
-    output reg         o_s_mem_r_en,
-    output reg         o_s_mem_w_en,
-    output reg         o_s_wb_en
+    output reg         o_mem_r_en,
+    output reg         o_mem_w_en,
+    output reg         o_wb_en,
+    output reg [3:0]   o_wb_addr
 );
     always @(posedge clk, posedge i_reset_n) begin
         if (!i_reset_n || i_flush) begin
@@ -399,14 +397,14 @@ module decoder_stage
             o_vs2        <= 32'b0;
             o_s1         <= 4'b0;
             o_s1         <= 4'b0;
-            o_wb_addr    <= 4'b0; 
             o_ld_st      <= 1'b0;
             o_br         <= 1'b0;
             o_f_c        <= 1'b0;
             o_imm        <= 1'b0;
-            o_s_mem_r_en <= 1'b0;
-            o_s_mem_w_en <= 1'b0;
-            o_s_wb_en    <= 1'b0;
+            o_mem_r_en   <= 1'b0;
+            o_mem_w_en   <= 1'b0;
+            o_wb_en      <= 1'b0;
+            o_wb_addr    <= 4'b0; 
         end else begin
             o_imm12      <= i_imm12;
             o_imm24      <= i_imm24;
@@ -415,14 +413,14 @@ module decoder_stage
             o_vs2        <= i_vs2;
             o_s1         <= i_s1;
             o_s1         <= i_s2;
-            o_wb_addr    <= i_wb_addr; 
             o_ld_st      <= i_ld_st;
             o_br         <= i_br;
             o_f_c        <= i_f_c;
             o_imm        <= i_imm;
-            o_s_mem_r_en <= i_s_mem_r_en;
-            o_s_mem_w_en <= i_s_mem_w_en;
-            o_s_wb_en    <= i_s_wb_en;
+            o_mem_r_en   <= i_mem_r_en;
+            o_mem_w_en   <= i_mem_w_en;
+            o_wb_en      <= i_wb_en;
+            o_wb_addr    <= i_wb_addr; 
         end
     end
 endmodule
@@ -484,6 +482,7 @@ module alu
     always @* begin
         c <= 1'b0;
         v <= 1'b0;
+
         case (i_ops)
             4'b0001: o_res <= i_y;
             4'b1001: o_res <= ~i_y;
@@ -685,7 +684,7 @@ module processor
 
     wire [3:0] w_de_nzcv = 4'b0000; // todo
 
-    wire            w_fs_reset_n;
+    wire            w_fs_reset_n = reset_n;
     wire            w_fs_freeze;
     wire [ARCH-1:0] w_fs_pc;
     wire [ARCH-1:0] w_fs_ins;
@@ -693,18 +692,19 @@ module processor
     wire            w_fs_br;        // Branch taken (1 = branch)
 
     wire [ARCH-1:0] w_de_pc;
-    wire            w_de_reset_n;
-    wire [3:0]      w_rn;           // 1st operand (reg address)
-    wire [3:0]      w_rm;           // 2nd operand (reg address)
-    wire            w_f_c;          // Carry flag
-    wire            w_ld_st;        // Load/Store bit (1 = load)
+    wire            w_de_reset_n = reset_n;
+    wire            w_de_freeze;
+    wire            w_de_flush;
+    wire [3:0]      w_de_rn;        // 1st operand (reg address)
+    wire [3:0]      w_de_rm;        // 2nd operand (reg address)
+    wire            w_de_f_c;       // Carry flag
+    wire            w_de_ld_st;     // Load/Store bit (1 = load)
     wire            w_de_imm;       // Immediate bit (1 = immediate) for expanding 12-bit immediate to 32-bit
-    wire [11:0]     w_imm12;        // 12-bit immediate
-    wire [23:0]     w_imm24;        // 24-bit immediate (for branch)
-    wire [3:0]      w_alu_c;        // ALU control
-    wire [ARCH-1:0] w_v_rn;         // 1st operand (value)
-    wire [ARCH-1:0] w_v_s2;         // 2st operand (value)
-    wire [ARCH-1:0] w_v_rd;         // 2st operand (value)
+    wire [11:0]     w_de_imm12;     // 12-bit immediate
+    wire [23:0]     w_de_imm24;     // 24-bit immediate (for branch)
+    wire [3:0]      w_de_alu_c;     // ALU control
+    wire [ARCH-1:0] w_de_v_rn;      // 1st operand (value)
+    wire [ARCH-1:0] w_de_vs2;       // 2st operand (value)
     wire            w_de_mem_r_en;  // Memory read enable
     wire            w_de_mem_w_en;  // Memory write enable
     wire            w_de_wb_en;     // Write back enable
@@ -714,7 +714,7 @@ module processor
     wire [ARCH-1:0] w_eu_pc;
     wire [3:0]      w_nzcv;
     wire [ARCH-1:0] w_v_rm;
-    wire [ARCH-1:0] w_alu_res;      // ALU result (value)
+    wire [ARCH-1:0] w_eu_alu_res;      // ALU result (value)
     wire [ARCH-1:0] w_eu_vs2;       // 2nd operand (value) : Rm
     wire            w_eu_mem_r_en;  // Memory read enable
     wire            w_eu_mem_w_en;  // Memory write enable
@@ -757,44 +757,97 @@ module processor
         .i_wb_data(w_wb_wb_data),
         .i_wb_addr(w_wb_wb_addr),
         .o_pc(w_de_pc),
-        .o_imm12(w_imm12),
-        .o_imm24(w_imm24),
-        .o_alu_c(w_alu_c),
-        .o_vs1(w_v_rn),
-        .o_vs2(w_v_s2),
-        .o_s1(w_rn),
-        .o_s2(w_rm),
-        .o_ld_st(w_ld_st),
+        .o_imm12(w_de_imm12),
+        .o_imm24(w_de_imm24),
+        .o_alu_c(w_de_alu_c),
+        .o_vs1(w_de_v_rn),
+        .o_vs2(w_de_vs2),
+        .o_s1(w_de_rn),
+        .o_s2(w_de_rm),
         .o_br(w_fs_br),
-        .o_f_c(w_f_c),
+        .o_f_c(w_de_f_c),
         .o_imm(w_de_imm),
-        .o_s_mem_r_en(w_de_mem_r_en),
-        .o_s_mem_w_en(w_de_mem_w_en),
+        .o_mem_r_en(w_de_mem_r_en),
+        .o_mem_w_en(w_de_mem_w_en),
         .o_wb_en(w_de_wb_en),
         .o_wb_addr(w_de_wb_addr)
+    );
+
+    wire            w_des_reset_n = reset_n;
+    wire [11:0]     w_des_imm12;
+    wire [23:0]     w_des_imm24;
+    wire [3:0]      w_des_alu_c;
+    wire [ARCH-1:0] w_des_vs1;
+    wire [ARCH-1:0] w_des_vs2;
+    wire [3:0]      w_des_s1;
+    wire [3:0]      w_des_s2;
+    wire            w_des_ld_st;
+    wire            w_des_br;
+    wire            w_des_f_c;
+    wire            w_des_imm;
+    wire            w_des_mem_r_en;
+    wire            w_des_mem_w_en;
+    wire            w_des_wb_en;
+    wire [3:0]      w_des_wb_addr;
+
+    decoder_stage des (
+        .clk(clk),
+        .i_reset_n(w_de_reset_n),
+        .i_flush(w_de_flush),
+        .i_freeze(w_de_freeze),
+        .i_mem_r_en(w_de_mem_r_en),
+        .i_mem_w_en(w_de_mem_w_en),
+        .i_imm(w_de_imm),
+        .i_br(w_fs_br),
+        .i_alu_c(w_de_alu_c),
+        .i_vs1(w_de_v_rn),
+        .i_vs2(w_de_vs2),
+        .i_imm12(w_de_imm12),
+        .i_imm24(w_de_imm24),
+        .i_wb_en(w_de_wb_en),
+        .i_wb_addr(w_de_wb_addr),
+        .i_ld_st(w_de_ld_st),
+        .i_f_c(w_de_f_c),
+        .i_s1(w_de_rn),
+        .i_s2(w_de_rm),
+        .o_imm12(w_des_imm12),
+        .o_imm24(w_des_imm24),
+        .o_alu_c(w_des_alu_c),
+        .o_vs1(w_des_vs1), 
+        .o_vs2(w_des_vs2),
+        .o_s1(w_des_s1), 
+        .o_s2(w_des_s2),
+        .o_ld_st(w_des_ld_st),
+        .o_br(w_des_br),
+        .o_f_c(w_des_f_c),
+        .o_imm(w_des_imm),
+        .o_mem_r_en(w_des_mem_r_en),
+        .o_mem_w_en(w_des_mem_w_en),
+        .o_wb_en(w_des_wb_en),
+        .o_wb_addr(w_des_wb_addr)
     );
 
     // *** (3) execute ***
     execution_unit eu (
         .clk(clk), 
         .i_pc(w_de_pc),
-        .i_mem_r_en(w_de_mem_r_en),
-        .i_mem_w_en(w_de_mem_w_en),
-        .i_wb_en(w_de_wb_en),
-        .i_wb_addr(w_de_wb_addr),
-        .i_imm(w_de_imm),
-        .i_f_c(w_f_c),
-        .i_ops(w_alu_c),
-        .i_imm12(w_imm12),
-        .i_imm24(w_imm24),
-        .i_v_rn(w_v_rn),
-        .i_v_rm(w_v_rm),
+        .i_mem_r_en(w_des_mem_r_en),
+        .i_mem_w_en(w_des_mem_w_en),
+        .i_wb_en(w_des_wb_en),
+        .i_wb_addr(w_des_wb_addr),
+        .i_imm(w_des_imm),
+        .i_f_c(w_des_f_c),
+        .i_ops(w_des_alu_c),
+        .i_imm12(w_des_imm12),
+        .i_imm24(w_des_imm24),
+        .i_v_rn(w_des_vs1),
+        .i_v_rm(w_des_vs2),
         .o_pc(w_eu_pc),
         .o_mem_r_en(w_eu_mem_r_en),
         .o_mem_w_en(w_eu_mem_w_en),
         .o_wb_en(w_eu_wb_en),
         .o_wb_addr(w_eu_wb_addr),
-        .o_alu_res(w_alu_res),
+        .o_alu_res(w_eu_alu_res),
         .o_vs2(w_eu_vs2),
         .o_alu_nzcv(w_nzcv),
         .o_br_addr(w_fs_br_addr)
@@ -809,12 +862,12 @@ module processor
         .i_mem_w_en(w_eu_mem_w_en),
         .i_wb_en(w_eu_wb_en),
         .i_wb_addr(w_eu_wb_addr),
-        .i_alu_res(w_alu_res),
+        .i_alu_res(w_eu_alu_res),
         .i_vs2(w_eu_vs2),
         .o_pc(w_m_pc),
-        .o_wb_en(w_m_wb_en),
         .o_mem_r_en(w_m_mem_r_en),
         .o_mem_w_en(w_m_mem_w_en),
+        .o_wb_en(w_m_wb_en),
         .o_wb_addr(w_m_wb_addr),       
         .o_wb_data(w_m_wb_data),
         .o_alu_res(w_m_mem_res)
@@ -849,17 +902,15 @@ module processor
             pc <= pc + 1;
             step <= 1'b1;
 
-            $display("(wb) : w_de_addr %d", w_de_wb_addr);
-            $display("(wb) : w_eu_addr %d", w_eu_wb_addr);
-            $display("(wb) : w_m_addr  %d", w_m_wb_addr);
-            $display("(wb) : w_wb_addr %d, v : %b", w_wb_wb_addr, w_wb_wb_data);
+            $display("(ins) : pc: %h", pc, " | ins: %h", w_fs_ins, " | cond %b", w_fs_ins[31:28], ", ops %b", w_fs_ins[27:21], ", s %b", w_fs_ins[20], ", rn %b", w_fs_ins[19:16], ", rd %b", w_fs_ins[15:12], ", imm12 %b", w_fs_ins[11:0]);
+            $display("(alu) : alu_c: %b", w_de_alu_c, " | alu result: %b", w_eu_alu_res);
+            $display("(de)  : w_de_v_rn: %b", w_de_v_rn);
+            $display("(s)   : wb_en: %b", w_wb_wb_en, " | w_mem_r_en: %b", w_m_mem_r_en, " | w_mem_w_en: %b", w_m_mem_w_en);
+            $display("(m)   : w_m_addr %d, mem_v : %b", w_wb_wb_addr, w_m_mem_res);
+            $display("(wb)  : w_wb_addr %d, wb_v : %b", w_wb_wb_addr, w_wb_wb_data);
 
-            $display("wb_en: %b", w_wb_wb_en, ", w_mem_r_en: %b", w_m_mem_r_en, ", w_mem_w_en: %b", w_m_mem_w_en);
-            $display("alu control: %b", w_alu_c, " | alu result: %b", w_alu_res);
-
-            $display("pc: %h", pc, " | ins: %h", w_fs_ins, " | cond %b", w_fs_ins[31:28], ", ops %b", w_fs_ins[27:21], ", s %b", w_fs_ins[20], ", rn %b", w_fs_ins[19:16], ", rd %b", w_fs_ins[15:12], ", imm12 %b", w_fs_ins[11:0]);
-
-            // $display("r00: %h", registers[0], ",  r01: %h", registers[1], ",  r02: %h", registers[2], ",  r03: %h", registers[3], ",  r04: %h", registers[4]);
+            // $display("r00: %b", de.rb.regs[0], ",  r01: %b");
+            // $display("r00: %h", de.rb.registers[0], ",  r01: %h", registers[1], ",  r02: %h", registers[2], ",  r03: %h", registers[3], ",  r04: %h", registers[4]);
             // $display("r05: %h", registers[5], ",  r06: %h", registers[6], ",  r07: %h", registers[7], ",  r08: %h", registers[8], ",  r09: %h", registers[9]);
             // $display("r10: %h", registers[10], ",   fp: %h", registers[11], ",   ip: %h", registers[12], ",   sp: %h", registers[13], ",   lr: %h", registers[14]);
             // $display(" pc: %h", registers[15]);
