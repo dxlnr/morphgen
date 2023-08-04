@@ -43,12 +43,12 @@ module fetching_stage
     output reg [N-1:0] o_ins
 );
     wire [N-1:0] w_pc;
-
-    assign w_pc = i_br ? i_br_addr: i_pc + 1;
-
+    
     ins_memory #(.DEPTH(512)) im (
         .clk(clk)
     );
+
+    assign w_pc = i_br ? i_br_addr: i_pc + 1;
 
     always @(posedge clk) begin
         if (!i_reset_n) 
@@ -252,6 +252,7 @@ module register_bank
             end
         end 
     end
+
 endmodule
 
 module arm32_decoder
@@ -319,7 +320,6 @@ module arm32_decoder
         .o_res(w_cond_res)
     );
 
-    assign o_pc         = i_pc;
     assign o_imm12      = i_ins[11:0];
     assign o_imm24      = i_ins[23:0];
     assign o_wb_addr    = w_rd;
@@ -577,14 +577,14 @@ module execution_stage
     input wire         i_reset_n,
     input wire         i_flush, 
     input wire         i_freeze, 
-    input wire         i_pc,
+    input wire [N-1:0] i_pc,
     input wire         i_mem_r_en,
     input wire         i_mem_w_en,
     input wire         i_wb_en,
     input wire [3:0]   i_wb_addr,
     input wire [N-1:0] i_alu_res,
     input wire [N-1:0] i_vs2,
-    output reg         o_pc,
+    output reg [N-1:0] o_pc,
     output reg         o_mem_r_en,
     output reg         o_mem_w_en,
     output reg         o_wb_en,
@@ -972,7 +972,6 @@ module processor
             step <= 1'b1;
         end
 
-        // *** write back ***
         if (step[6] == 1'b1) begin
             pc <= pc + 1;
             step <= 1'b1;
