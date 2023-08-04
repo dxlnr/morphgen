@@ -296,6 +296,7 @@ module arm32_decoder
     input wire [N-1:0] i_pc,
     input wire [N-1:0] i_ins,
     input wire [3:0]   i_nzcv,          // Condition flags (NZCV)
+    input wire         i_w_f_en,        //
     input wire         i_wb_en, 
     input wire [N-1:0] i_wb_data,
     input wire [3:0]   i_wb_addr,
@@ -313,7 +314,8 @@ module arm32_decoder
     output reg         o_mem_r_en,      // memory read enable used mem access  (4)
     output reg         o_mem_w_en,      // memory write enable used mem access (4)
     output reg         o_wb_en,         // write back enable used write back   (5) 
-    output reg [3:0]   o_wb_addr        // destination (wb) register : Rd      (5)
+    output reg [3:0]   o_wb_addr,       // destination (wb) register : Rd      (5)
+    output reg [3:0]   o_w_f_en
 );
     wire [3:0]  w_rn    = i_ins[19:16]; // 1st operand (reg address)
     wire [3:0]  w_rs    = i_ins[11:8];  // only used in mul and mla (reg address) Rs = Rm
@@ -369,6 +371,7 @@ module arm32_decoder
     assign o_imm        = w_s_mux ? 1'b0 : w_imm;
     assign o_alu_c      = w_s_mux ? 4'b0 : w_alu_c;
     assign w_r_s2       = w_mem_w_en ? w_rd : w_rm;
+    assign o_w_f_en     = i_w_f_en;
 
     register_bank rb (
         .clk(clk),
@@ -401,6 +404,7 @@ module decoder_stage
     input wire [N-1:0] i_vs2,
     input wire [11:0]  i_imm12,
     input wire [23:0]  i_imm24,
+    input wire         i_w_f_en,
     input wire         i_wb_en,
     input wire [3:0]   i_wb_addr,
     input wire         i_ld_st,
@@ -422,7 +426,8 @@ module decoder_stage
     output reg         o_mem_r_en,
     output reg         o_mem_w_en,
     output reg         o_wb_en,
-    output reg [3:0]   o_wb_addr
+    output reg [3:0]   o_wb_addr,
+    output reg         o_w_f_en
 );
     always @(posedge clk, posedge i_reset_n) begin
         if (!i_reset_n || i_flush) begin
@@ -442,6 +447,7 @@ module decoder_stage
             o_mem_w_en   <= 1'b0;
             o_wb_en      <= 1'b0;
             o_wb_addr    <= 4'b0; 
+            o_w_f_en     <= 1'b0;
         end else begin
             o_pc         <= i_pc;
             o_imm12      <= i_imm12;
@@ -459,6 +465,7 @@ module decoder_stage
             o_mem_w_en   <= i_mem_w_en;
             o_wb_en      <= i_wb_en;
             o_wb_addr    <= i_wb_addr; 
+            o_w_f_en     <= i_w_f_en;
         end
     end
 endmodule
@@ -651,6 +658,25 @@ module execution_stage
     end
 endmodule
 
+module status_register
+    #(parameter N = 32
+    )(
+    input wire       clk,
+    input wire       i_reset_n,
+    input wire [3:0] i_nzcv,
+    input wire       i_mem,
+    output reg [3:0] o_nzcv
+);
+    always@(negedge clk)  begin
+        if (!i_reset_n) 
+            o_nzcv <= 0;
+        else if (i_mem) 
+            o_nzcv <= i_nzcv;
+        else 
+            o_nzcv <= o_nzcv;
+    end
+endmodule
+
 module memory_stage
     #(parameter N = 32
     )(
@@ -791,6 +817,7 @@ module processor
     wire            w_de_wb_en;     // Write back enable
     wire [3:0]      w_de_wb_addr;   // write back address (Destination register)
     wire [ARCH-1:0] w_de_wb_data;   // write back data (value) read from memory
+    wire            w_de_w_f_en;    // Write enable NZCV
 
     wire [ARCH-1:0] w_eu_pc;
     wire [3:0]      w_nzcv;
@@ -836,6 +863,7 @@ module processor
         .i_wb_en(w_wb_wb_en),
         .i_wb_data(w_wb_wb_data),
         .i_wb_addr(w_wb_wb_addr),
+        .i_w_f_en(w_de_w_f_en),
         .o_pc(w_de_pc),
         .o_imm12(w_de_imm12),
         .o_imm24(w_de_imm24),
@@ -850,7 +878,8 @@ module processor
         .o_mem_r_en(w_de_mem_r_en),
         .o_mem_w_en(w_de_mem_w_en),
         .o_wb_en(w_de_wb_en),
-        .o_wb_addr(w_de_wb_addr)
+        .o_wb_addr(w_de_wb_addr),
+        .o_w_f_en(w_de_w_f_en)
     );
 
     wire [ARCH-1:0] w_des_pc;
@@ -870,6 +899,7 @@ module processor
     wire            w_des_mem_w_en;
     wire            w_des_wb_en;
     wire [3:0]      w_des_wb_addr;
+    wire            w_des_w_f_en;
 
     decoder_stage des (
         .clk(clk),
@@ -886,6 +916,7 @@ module processor
         .i_vs2(w_de_vs2),
         .i_imm12(w_de_imm12),
         .i_imm24(w_de_imm24),
+        .i_w_f_en(w_de_w_f_en),
         .i_wb_en(w_de_wb_en),
         .i_wb_addr(w_de_wb_addr),
         .i_ld_st(w_de_ld_st),
@@ -907,7 +938,8 @@ module processor
         .o_mem_r_en(w_des_mem_r_en),
         .o_mem_w_en(w_des_mem_w_en),
         .o_wb_en(w_des_wb_en),
-        .o_wb_addr(w_des_wb_addr)
+        .o_wb_addr(w_des_wb_addr),
+        .o_w_f_en(w_des_w_f_en)
     );
 
     // *** (3) execute ***
@@ -968,6 +1000,16 @@ module processor
         .o_alu_res(w_es_alu_res),
         .o_vs2(w_es_vs2)
     );
+    
+    wire            w_rs_reset_n = reset_n;
+    status_register rs (
+        .clk(clk),
+        .i_reset_n(w_rs_reset_n),
+        .i_nzcv(w_nzcv),
+        .i_mem(w_des_w_f_en),
+        .o_nzcv(w_de_nzcv)
+    );
+
 
     // *** (4) memory access ***
     memory_stage m (
