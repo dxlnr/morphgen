@@ -30,6 +30,26 @@ module ins_memory
     reg [D_BITS - 1:0] mem [0:DEPTH - 1];
 endmodule
 
+module program_counter 
+    #(parameter N = 32
+    )(
+    input wire         clk,
+    input wire         i_reset_n,
+    input wire         i_load,
+    input wire [N-1:0] i_pc,
+    output reg [N-1:0] o_pc
+);
+    always @(posedge clk) begin
+        if (!i_reset_n) begin 
+            o_pc <= 32'b0;
+        end
+        else if (clk && i_load) 
+            o_pc <= i_pc;
+        else 
+            o_pc <= o_pc;
+    end
+endmodule 
+
 module fetching_stage
     #(parameter N = 32
     )(
@@ -38,25 +58,38 @@ module fetching_stage
     input wire         i_freeze,
     input wire         i_br,
     input wire [N-1:0] i_br_addr,
-    input wire [N-1:0] i_pc,
     output reg [N-1:0] o_pc,
     output reg [N-1:0] o_ins
 );
+    wire [N-1:0] w_pc_in;
+    wire [N-1:0] w_pc_o;
     wire [N-1:0] w_pc;
+    wire [N-1:0] w_mux_in;
+    wire [N-1:0] w_mux_o;
     
     ins_memory #(.DEPTH(512)) im (
         .clk(clk)
     );
 
-    assign w_pc = i_br ? i_br_addr: i_pc + 1;
+    assign w_mux_o = i_br ? i_br_addr: w_mux_in;
+
+    program_counter pc (
+        .clk(clk),
+        .i_reset_n(i_reset_n),
+        .i_load(1'b1),
+        .i_pc(w_pc_in),
+        .o_pc(w_pc_o)
+    );
+
+    assign w_pc_in = w_mux_o;
+    assign w_pc = w_pc_o + 1;
+    assign w_mux_in = w_pc;
 
     always @(posedge clk) begin
-        if (!i_reset_n) 
-            o_pc <= 32'b0;
-
-        o_pc <= w_pc;
-        o_ins <= im.mem[w_pc];
+        o_ins <= im.mem[w_pc_o];
     end
+
+    assign o_pc = w_pc;
 endmodule
 
 module control_unit
@@ -320,6 +353,7 @@ module arm32_decoder
         .o_res(w_cond_res)
     );
 
+    assign o_pc         = i_pc;
     assign o_imm12      = i_ins[11:0];
     assign o_imm24      = i_ins[23:0];
     assign o_wb_addr    = w_rd;
@@ -357,6 +391,7 @@ module decoder_stage
     input wire         i_reset_n,
     input wire         i_flush,         // flush the pipe (branch predict gone wrong)
     input wire         i_freeze,        // freeze pipeline (potential inefficiency)
+    input wire [N-1:0] i_pc,
     input wire         i_mem_r_en,
     input wire         i_mem_w_en,
     input wire         i_imm,
@@ -372,6 +407,7 @@ module decoder_stage
     input wire         i_f_c,
     input wire [3:0]   i_s1,
     input wire [3:0]   i_s2,
+    output reg [N-1:0] o_pc,
     output reg [11:0]  o_imm12,
     output reg [23:0]  o_imm24,
     output reg [3:0]   o_alu_c,
@@ -390,6 +426,7 @@ module decoder_stage
 );
     always @(posedge clk, posedge i_reset_n) begin
         if (!i_reset_n || i_flush) begin
+            o_pc         <= 32'b0;
             o_imm12      <= 12'b0;
             o_imm24      <= 24'b0;
             o_alu_c      <= 4'b0;
@@ -406,6 +443,7 @@ module decoder_stage
             o_wb_en      <= 1'b0;
             o_wb_addr    <= 4'b0; 
         end else begin
+            o_pc         <= i_pc;
             o_imm12      <= i_imm12;
             o_imm24      <= i_imm24;
             o_alu_c      <= i_alu_c;
@@ -784,7 +822,6 @@ module processor
         .i_freeze(w_fs_freeze),
         .i_br(w_fs_br),
         .i_br_addr(w_fs_br_addr),
-        .i_pc(pc),
         .o_pc(w_fs_pc),
         .o_ins(w_fs_ins)
     );
@@ -816,6 +853,7 @@ module processor
         .o_wb_addr(w_de_wb_addr)
     );
 
+    wire [ARCH-1:0] w_des_pc;
     wire            w_des_reset_n = reset_n;
     wire [11:0]     w_des_imm12;
     wire [23:0]     w_des_imm24;
@@ -838,6 +876,7 @@ module processor
         .i_reset_n(w_de_reset_n),
         .i_flush(w_de_flush),
         .i_freeze(w_de_freeze),
+        .i_pc(w_de_pc),
         .i_mem_r_en(w_de_mem_r_en),
         .i_mem_w_en(w_de_mem_w_en),
         .i_imm(w_de_imm),
@@ -853,6 +892,7 @@ module processor
         .i_f_c(w_de_f_c),
         .i_s1(w_de_rn),
         .i_s2(w_de_rm),
+        .o_pc(w_des_pc),
         .o_imm12(w_des_imm12),
         .o_imm24(w_des_imm24),
         .o_alu_c(w_des_alu_c),
@@ -873,7 +913,7 @@ module processor
     // *** (3) execute ***
     execution_unit eu (
         .clk(clk), 
-        .i_pc(w_de_pc),
+        .i_pc(w_des_pc),
         .i_mem_r_en(w_des_mem_r_en),
         .i_mem_w_en(w_des_mem_w_en),
         .i_wb_en(w_des_wb_en),
@@ -933,7 +973,7 @@ module processor
     memory_stage m (
         .clk(clk), 
         .i_reset_n(w_de_reset_n),
-        .i_pc(w_eu_pc),
+        .i_pc(w_es_pc),
         .i_mem_r_en(w_eu_mem_r_en),
         .i_mem_w_en(w_eu_mem_w_en),
         .i_wb_en(w_eu_wb_en),
@@ -963,18 +1003,4 @@ module processor
         .o_wb_data(w_wb_wb_data),
         .o_wb_addr(w_wb_wb_addr)
     );
-
-    always @(posedge clk) begin
-        step <= step << 1;
-        if (!reset_n) begin 
-            pc <= 0;
-            trap <= 1'b0;
-            step <= 1'b1;
-        end
-
-        if (step[6] == 1'b1) begin
-            pc <= pc + 1;
-            step <= 1'b1;
-        end
-    end
 endmodule
