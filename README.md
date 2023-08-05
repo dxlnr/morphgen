@@ -6,7 +6,7 @@ Implementing an Assembler & Processor using the [RISC-V](https://riscv.org/wp-co
 
 ### CPU
 
-```mermaid
+```
 fetch -> decode -> execute -> memory access -> write back
 ```
 
@@ -78,3 +78,4 @@ Operand2     - Second (flexible) operand. Can be an immediate value (number) or 
 - Course: [Computer Systems Organization](https://nyu-cso.github.io/index.html)
 - [Unofficial RISC-V Manual](https://jemu.oscc.cc/): Additional manuscript about RISC-V along the official RISC-V Manual.
 - [riscv-isadoc](https://msyksphinz-self.github.io/riscv-isadoc/html/index.html): Instruction Set docs on Github.
+- [riscv-dbg](https://github.com/pulp-platform/riscv-dbg/tree/master)
